@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'settlements',
 ]
 
+AUTH_USER_MODEL = "accounts.Profile"  # 커스텀 유저
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
