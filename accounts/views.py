@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,9 +9,9 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .serializers import (
     SignupSerializer, CheckEmailQuerySerializer,
-    LoginSerializer, MeSerializer,
+    LoginSerializer, MeSerializer, PointHistorySerializer,
 )
-from .selectors import is_email_taken
+from .selectors import is_email_taken, select_wallet_history
 from .services import authenticate_by_email_password, issue_access_token
 from .models import Profile
 
@@ -106,3 +107,44 @@ class MeView(APIView):
     def get(self, request):
         ser = MeSerializer(request.user)
         return Response(ser.data, status=200)
+
+
+class WalletHistoryView(APIView, PageNumberPagination):
+    permission_classes = [IsAuthenticated]
+    page_size = 20
+
+    def get(self, request):
+        ph_type = request.query_params.get("type")
+        since = request.query_params.get("since")
+        until = request.query_params.get("until")
+        challenge_id = request.query_params.get("challenge_id")
+        page_size = request.query_params.get("page_size", self.page_size)
+
+        # page_size validation
+        try:
+            page_size = int(page_size)
+            if not (1 <= page_size <= 100):
+                return Response({"detail": "page_size는 1~100 사이여야 합니다."}, status=400)
+            self.page_size = page_size
+        except ValueError:
+            return Response({"detail": "page_size는 정수여야 합니다."}, status=400)
+
+        qs = select_wallet_history(
+            user=request.user,
+            ph_type=ph_type,
+            since=since,
+            until=until,
+            challenge_id=challenge_id,
+        )
+
+        page = self.paginate_queryset(qs, request, view=self)
+        serializer = PointHistorySerializer(page, many=True)
+
+        response_data = {
+            "user_id": request.user.id,
+            "page": int(request.query_params.get("page", 1)),
+            "page_size": self.page_size,
+            "total_count": self.page.paginator.count,
+            "results": serializer.data,
+        }
+        return Response(response_data, status=200)

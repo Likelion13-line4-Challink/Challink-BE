@@ -1,9 +1,8 @@
-# accounts/serializers.py
 from rest_framework import serializers
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 
-from .models import Profile
+from .models import Profile, PointHistory
 from challenges.models import ChallengeMember   # /users/me/ 집계용
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -67,3 +66,30 @@ class MeSerializer(serializers.ModelSerializer):
 
     def get_completed_challenges_count(self, obj: Profile) -> int:
         return ChallengeMember.objects.filter(user=obj, challenge__status="ended").count()
+
+
+class PointHistorySerializer(serializers.ModelSerializer):
+    history_id = serializers.IntegerField(source="point_history_id")
+    type = serializers.CharField(source="get_type_display")  # 충전/참가/보상
+    title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PointHistory
+        fields = (
+            "history_id",
+            "type",
+            "title",
+            "amount",
+            "balance_after",
+            "challenge_id",
+            "occurred_at",
+        )
+
+    def get_title(self, obj):
+        # description이 비어있지 않으면 그대로 사용
+        # 없으면 challenge 제목 fallback
+        if obj.description:
+            return obj.description
+        if obj.challenge:
+            return obj.challenge.title
+        return "포인트 내역"
