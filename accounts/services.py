@@ -1,4 +1,3 @@
-# accounts/services.py
 from django.conf import settings
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
