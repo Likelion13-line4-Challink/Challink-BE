@@ -115,7 +115,8 @@ class ChallengeCardSerializer(serializers.ModelSerializer):
 
 class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
     # 미참여(게스트/팝업)
-    ai_condition = serializers.CharField(source="ai_condition")
+    # ai_condition = serializers.CharField(source="ai_condition")
+    ai_condition = serializers.CharField()
     owner_name = serializers.SerializerMethodField()
     category = CategoryMiniSerializer()
     my_membership = serializers.SerializerMethodField()
