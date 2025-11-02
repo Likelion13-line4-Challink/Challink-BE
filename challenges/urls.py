@@ -10,6 +10,6 @@ from .views import (
 urlpatterns = [
     path("", ChallengeListView.as_view()),                 # GET /challenges/
     path("my/", MyChallengeListView.as_view()),            # GET /challenges/my/
-    path("my/completed", MyCompletedChallengeListView.as_view()),  # GET /challenges/my/completed
+    path("my/completed/", MyCompletedChallengeListView.as_view()),  # GET /challenges/my/completed/
     path("<int:challenge_id>/", ChallengeDetailView.as_view()),    # GET /challenges/{id}/
 ]

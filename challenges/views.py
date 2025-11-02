@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, timedelta
+from django.utils import timezone
 
 from django.shortcuts import render
 from rest_framework import status, permissions
@@ -6,6 +7,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import GenericAPIView
+from main.utils.pagination import StandardPagePagination
+from django.conf import settings
+from .models import CompleteImage, ChallengeMember
+
 
 from .serializers import (
     CompleteImageDetailSerializer,
@@ -24,6 +29,7 @@ from .selectors import (
     challenge_detail_selector,
 )
 from .services import create_comment
+DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
 
 
 
@@ -82,6 +88,7 @@ class ChallengeListView(GenericAPIView):
     """
     permission_classes = [permissions.AllowAny]
     serializer_class = ChallengeCardSerializer
+    pagination_class = StandardPagePagination
 
     def get(self, request):
         include_full = request.query_params.get("include_full", "false").lower() == "true"
@@ -98,12 +105,10 @@ class ChallengeListView(GenericAPIView):
         )
 
         page = self.paginate_queryset(qs)
+        data = self.get_serializer(page if page is not None else qs, many=True, context={"request": request}).data
         if page is not None:
-            data = self.get_serializer(page, many=True, context={"request": request}).data
             return self.get_paginated_response(data)
-
-        data = self.get_serializer(qs, many=True, context={"request": request}).data
-        return Response(data)
+        return Response({"page": 1, "page_size": len(data), "total": len(data), "items": data})
 
 
 class MyChallengeListView(GenericAPIView):
@@ -114,6 +119,7 @@ class MyChallengeListView(GenericAPIView):
     - 정렬 기본: 최근 생성(created_at DESC)
     """
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardPagePagination
 
     def get(self, request):
         status_q = request.query_params.get("status", "active")  # active | ended
@@ -164,18 +170,19 @@ class MyChallengeListView(GenericAPIView):
 
         if page is not None:
             return self.get_paginated_response(items)
-        return Response(items)
+        return Response({"page": 1, "page_size": len(items), "total": len(items), "items": items})
 
 
 class MyCompletedChallengeListView(GenericAPIView):
     """
-    GET /challenges/my/completed
+    GET /challenges/my/completed/
     - alias: /challenges/my/?status=ended
     - 로그인 필수
     - 정렬 기본: 최근 생성(created_at DESC)
     + 옵션: reward_desc (보상 많은 순)
     """
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardPagePagination
 
     def get(self, request):
         order = request.query_params.get("order", "recent")  # recent | oldest | reward_desc
@@ -223,14 +230,34 @@ class MyCompletedChallengeListView(GenericAPIView):
                     "status": ch.status,
                     "start_date": ch.start_date,
                     "end_date": ch.end_date,
-                    "is_joined": True,
                 }
             })
 
         if page is not None:
             return self.get_paginated_response(items)
-        return Response(items)
+        return Response({"page": 1, "page_size": len(items), "total": len(items), "items": items})
 
+def _calc_streak_days(user_id: int, challenge_id: int) -> int:
+    """
+    오늘을 끝점으로 승인된 인증의 연속 일수
+    """
+    today = timezone.localdate()
+    qs = (CompleteImage.objects
+        .filter(challenge_member__challenge_id=challenge_id, user_id=user_id, status="approved")
+        .values_list("date", flat=True)
+        .distinct()
+        .order_by("-date"))
+    dates = list(qs)
+    if not dates:
+        return 0
+    streak, cursor = 0, today
+    for d in dates:
+        if d == cursor:
+            streak += 1
+            cursor = cursor - timedelta(days=1)
+        elif d < cursor:
+            break
+    return streak
 
 class ChallengeDetailView(GenericAPIView):
     """
@@ -258,9 +285,48 @@ class ChallengeDetailView(GenericAPIView):
             ser = ChallengeDetailForGuestSerializer(challenge, context={"request": request})
             return Response(ser.data, status=200)
 
-        # 참여자용 응답
+        # ✅ 참여자 응답(최소 구현)
         setattr(challenge, "__my_member__", my_member)
-        participants = []  # TODO: 멤버목록/썸네일/스트릭 연동 시 채움
+        today = timezone.localdate()
+
+        members = (ChallengeMember.objects
+                   .select_related("user")
+                   .filter(challenge_id=challenge.id))
+
+        today_approved_uids = set(CompleteImage.objects.filter(
+            challenge_member__challenge_id=challenge.id,
+            status="approved",
+            date=today
+        ).values_list("user_id", flat=True))
+
+        latest_approved = (CompleteImage.objects
+                           .filter(challenge_member__challenge_id=challenge.id, status="approved")
+                           .order_by("user_id", "-date", "-id")
+                           .values("user_id", "image"))
+
+        latest_map = {}
+        for row in latest_approved:
+            uid = row["user_id"]
+            if uid not in latest_map:
+                latest_map[uid] = row["image"]
+
+        participants = []
+        for m in members:
+            uid = m.user_id
+            has_today = uid in today_approved_uids
+            latest = latest_map.get(uid)
+            display = latest if (has_today and latest) else (latest or DEFAULT_DISPLAY_THUMBNAIL)
+            participants.append({
+                "user_id": uid,
+                "name": m.user.name if m.user and m.user.name else "",
+                "avatar": None,
+                "streak_days": _calc_streak_days(uid, challenge.id),
+                "has_proof_today": has_today,
+                "latest_proof_image": latest,
+                "display_thumbnail": display,
+                "is_owner": (m.role == "owner"),
+            })
+
         payload = {
             "id": challenge.id,
             "title": challenge.title,
@@ -276,7 +342,7 @@ class ChallengeDetailView(GenericAPIView):
             "progress_summary": {
                 "success_today": success_today,
                 "total_members": challenge.member_count_cache,
-                "date": date.today(),
+                "date": today,
             },
             "participants": participants,
             "my_membership": {

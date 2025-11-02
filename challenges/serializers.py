@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import CompleteImage, Comment
 
 from rest_framework import serializers
-from .models import Challenge, ChallengeMember, ChallengeCategory
+from .models import Challenge, ChallengeCategory
 
 class CommentSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source="user.name", read_only=True)
@@ -85,6 +85,9 @@ class CategoryMiniSerializer(serializers.ModelSerializer):
         model = ChallengeCategory
         fields = ("id", "name")
 
+class CategoryMiniOut(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
 
 class ChallengeCardSerializer(serializers.ModelSerializer):
     category = CategoryMiniSerializer()
@@ -112,6 +115,7 @@ class ChallengeCardSerializer(serializers.ModelSerializer):
 
 class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
     # 미참여(게스트/팝업)
+    ai_condition = serializers.CharField(source="ai_condition")
     owner_name = serializers.SerializerMethodField()
     category = CategoryMiniSerializer()
     my_membership = serializers.SerializerMethodField()
@@ -124,7 +128,7 @@ class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
         fields = (
             "id", "title", "owner_name", "cover_image",
             "entry_fee", "duration_weeks", "freq_type",
-            "subtitle", "ai_condition_text", "category",
+            "subtitle", "ai_condition", "category",
             "status", "start_date", "end_date",
             "member_count", "member_limit",
             "my_membership", "joinable", "join_block_reason",
@@ -162,7 +166,7 @@ class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
 
 
 class ParticipantMiniSerializer(serializers.Serializer):
-    # TODO: 추후 사용자/썸네일 연동 시 실제 데이터로 대체
+    # 추후 사용자/썸네일 연동 시 실제 데이터로 대체
     user_id = serializers.IntegerField()
     name = serializers.CharField()
     avatar = serializers.CharField(allow_null=True)
@@ -179,34 +183,20 @@ class ProgressSummarySerializer(serializers.Serializer):
     date = serializers.DateField()
 
 
-class ChallengeDetailForMemberSerializer(serializers.ModelSerializer):
+class ChallengeDetailForMemberSerializer(serializers.Serializer):
     # 참여 중(진행 화면)
-    category = CategoryMiniSerializer()
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    entry_fee = serializers.IntegerField()
+    duration_weeks = serializers.IntegerField()
+    freq_type = serializers.CharField()
+    category = CategoryMiniOut()
+    status = serializers.CharField()
+    start_date = serializers.DateField(allow_null=True)
+    end_date = serializers.DateField(allow_null=True)
+    member_count = serializers.IntegerField()
+    member_limit = serializers.IntegerField()
     progress_summary = ProgressSummarySerializer()
     participants = ParticipantMiniSerializer(many=True)
-    my_membership = serializers.SerializerMethodField()
-    member_count = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Challenge
-        fields = (
-            "id", "title", "entry_fee", "duration_weeks", "freq_type",
-            "category", "status", "start_date", "end_date",
-            "member_count", "member_limit",
-            "progress_summary", "participants",
-            "my_membership", "settlement_note",
-        )
-
-    def get_my_membership(self, obj):
-        mm = getattr(obj, "__my_member__", None)
-        if not mm:
-            return {"is_joined": False}
-        return {
-            "is_joined": True,
-            "challenge_member_id": mm.id,
-            "role": mm.role,
-            "joined_at": mm.joined_at,
-        }
-
-    def get_member_count(self, obj):
-        return getattr(obj, "member_count_cache", 0)
+    my_membership = serializers.DictField()
+    settlement_note = serializers.CharField()

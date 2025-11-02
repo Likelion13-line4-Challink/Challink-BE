@@ -103,7 +103,7 @@ def my_challenges_selector(
         .select_related("challenge", "challenge__category")
         .filter(user=user))
 
-    # 상태 필터
+    # "나의 챌린지": 진행중만 / "완료": ended만
     if status == "active":
         qs = qs.filter(challenge__status="active")
     elif status == "ended":
@@ -123,21 +123,24 @@ def my_challenges_selector(
             Q(challenge__category__name__icontains=search)
         )
 
-    # 정렬
-    # - 요구사항: "최신 생성된 챌린지 맨 위" → 기본 created_at DESC
-    # - 완료 목록 특수 옵션: reward_desc
-    if status == "ended" and order == "reward_desc":
-        qs = qs.order_by("-final_points_awarded", "-challenge__created_at", "-id")
-    elif order == "oldest":
-        qs = qs.order_by("challenge__created_at", "id")
+    # 정렬 active → created_at, ended → end_date
+    if status == "ended":
+        if order == "reward_desc":
+            qs = qs.order_by("-final_points_awarded", "-challenge__end_date", "-id")
+        elif order == "oldest":
+            qs = qs.order_by("challenge__end_date", "id")
+        else:
+            qs = qs.order_by("-challenge__end_date", "-id")
     else:
-        qs = qs.order_by("-challenge__created_at", "-id")
+        if order == "oldest":
+            qs = qs.order_by("challenge__created_at", "id")
+        else:
+            qs = qs.order_by("-challenge__created_at", "-id")
 
     return qs
 
 
 def challenge_detail_selector(challenge_id: int, *, user=None):
-    # 디테일: challenge + (있으면) 내 membership + 오늘 성공 수
     challenge = (Challenge.objects
                 .select_related("category", "owner")
                 .filter(id=challenge_id)
@@ -157,7 +160,7 @@ def challenge_detail_selector(challenge_id: int, *, user=None):
     success_today = CompleteImage.objects.filter(
         challenge_member__challenge_id=challenge_id,
         status="approved",
-        date=today,  # 날짜 컬럼이 모델에 이미 존재
+        date=today,
     ).count()
 
     return challenge, (my_member, success_today)
