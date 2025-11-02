@@ -147,6 +147,10 @@ class Comment(models.Model):
         related_name="comments",
     )
     content = models.TextField()
+
+    x_ratio = models.FloatField(null=True, blank=True)
+    y_ratio = models.FloatField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
 
