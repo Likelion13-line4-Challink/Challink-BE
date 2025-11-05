@@ -22,5 +22,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("accounts.urls")),
     path("challenges/", include("challenges.urls")),
+<<<<<<< HEAD
     path("aiauth/", include("aiauthentications.urls")),
+=======
+    path("challenges/", include("settlements.urls")),
+>>>>>>> d4739711d45e1b55b75afdfe6d262ebc3a937f64
 ]

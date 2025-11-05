@@ -4,7 +4,7 @@ from rest_framework import status
 from django.utils import timezone  # NEW
 from django.conf import settings   # NEW
 from .serializers import AIVerifyImageSerializer
-from .gemini_image_service import judge_image
+from .gemini_service import judge_image
 from challenges.models import Challenge, ChallengeMember, CompleteImage  # CHANGED
 from PIL import Image
 
