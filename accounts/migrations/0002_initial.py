@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("accounts", "0001_initial"),
+        ('challenges', '0001_initial'),
     ]
 
     operations = [

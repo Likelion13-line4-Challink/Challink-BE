@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'challenges',
     'aiauthentications',
     'settlements',
+    'corsheaders',
 ]
 
 AUTH_USER_MODEL = "accounts.Profile"  # 커스텀 유저
@@ -60,6 +61,7 @@ AUTH_USER_MODEL = "accounts.Profile"  # 커스텀 유저
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -137,6 +139,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_ORIGINS = []
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

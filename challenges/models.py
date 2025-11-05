@@ -22,7 +22,6 @@ class Challenge(models.Model):
         ("canceled", "canceled"),
     )
     FREQ_CHOICES = (("매일", "매일"), ("평일", "평일"), ("주말", "주말"), ("주 N일", "주 N일"))
-    SETTLE_METHOD_CHOICES = (("equal", "equal"), ("performance", "performance"))  # 정산 방식 예시
 
     title = models.CharField(max_length=200)
     subtitle = models.CharField(max_length=200, blank=True, default="")
@@ -33,8 +32,14 @@ class Challenge(models.Model):
     freq_type = models.CharField(max_length=10, choices=FREQ_CHOICES, default="매일")
     freq_n_days = models.PositiveIntegerField(null=True, blank=True)
 
-    ai_condition_text = models.TextField(blank=True, default="")
-    settle_method = models.CharField(max_length=20, choices=SETTLE_METHOD_CHOICES, default="equal")
+    class SettleMethod(models.IntegerChoices):
+        N_TO_ONE_WINNER = 1, "성공자끼리 1/N 균등 분배"
+        PROPORTIONAL    = 2, "성공률 비례 분배"
+        REFUND_PLUS_ALL = 3, "성공자 환급 + 잔여 1/N 분배"
+        DONATE_FAIL_FEE = 4, "실패자 참가비 기부"
+    
+    ai_condition = models.TextField(blank=True, default="")
+    settle_method = models.IntegerField(choices=SettleMethod.choices, default=SettleMethod.N_TO_ONE_WINNER)
 
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="draft")
     start_date = models.DateField(null=True, blank=True)
@@ -147,6 +152,10 @@ class Comment(models.Model):
         related_name="comments",
     )
     content = models.TextField()
+
+    x_ratio = models.FloatField(null=True, blank=True)
+    y_ratio = models.FloatField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
 
