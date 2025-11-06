@@ -35,3 +35,8 @@ PyYAML==6.0.3
 sqlparse==0.5.3
 tzdata==2025.2
 virtualenv==20.35.3
+Pillow
+python-dotenv
+google-generativeai
+imagehash
+google-cloud-vision
