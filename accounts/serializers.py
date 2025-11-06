@@ -36,11 +36,6 @@ class SignupSerializer(serializers.ModelSerializer):
         return user
 
 
-class CheckEmailQuerySerializer(serializers.Serializer):
-    """ /auth/check-email/?email=... 파싱용 """
-    email = serializers.EmailField()
-
-
 class LoginSerializer(serializers.Serializer):
     """ 로그인 입력 검증용 """
     email = serializers.EmailField()
