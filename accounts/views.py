@@ -4,11 +4,9 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from django.core.validators import validate_email
-from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .serializers import (
-    SignupSerializer, CheckEmailQuerySerializer,
+    SignupSerializer,
     LoginSerializer, MeSerializer, PointHistorySerializer,
 )
 from .selectors import is_email_taken, select_wallet_history
@@ -42,26 +40,6 @@ class SignupView(APIView):
             "created_at": user.created_at.isoformat().replace("+00:00", "Z") if user.created_at else None,
         }
         return Response(body, status=status.HTTP_201_CREATED)
-
-
-class CheckEmailView(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        q = CheckEmailQuerySerializer(data=request.query_params)
-        q.is_valid(raise_exception=True)
-        email = q.validated_data["email"]
-        try:
-            validate_email(email)
-        except DjangoValidationError:
-            return Response(
-                {"code": "INVALID_EMAIL", "message": "이메일 형식이 잘못되었습니다."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        taken = is_email_taken(email)
-        msg = "해당 이메일의 계정이 이미 존재합니다." if taken else "사용 가능한 이메일입니다."
-        return Response({"email": email, "available": (not taken), "message": msg}, status=200)
 
 
 class LoginView(APIView):
