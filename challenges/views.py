@@ -1,15 +1,21 @@
-from datetime import date, timedelta
+from datetime import timedelta
 from django.utils import timezone
 
 from django.shortcuts import render
-from rest_framework import status, permissions
+from rest_framework import status, permissions, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import GenericAPIView
 from main.utils.pagination import StandardPagePagination
 from django.conf import settings
-from .models import CompleteImage, ChallengeMember
+from .models import CompleteImage, ChallengeMember, Challenge
+
+from rest_framework.permissions import AllowAny
+
+
+
+
 
 
 from .serializers import (
@@ -20,6 +26,9 @@ from .serializers import (
     ChallengeCardSerializer,
     ChallengeDetailForGuestSerializer,
     ChallengeDetailForMemberSerializer,
+
+    ChallengeCreateSerializer,
+    ChallengeCreateOutSerializer,
 )
 from .selectors import (
     get_complete_image_with_comments,
@@ -355,3 +364,20 @@ class ChallengeDetailView(GenericAPIView):
         }
         ser = ChallengeDetailForMemberSerializer(payload)
         return Response(ser.data, status=200)
+
+
+
+
+class ChallengeCreateView(generics.CreateAPIView):
+    """POST /challenges/ : 챌린지 생성 전용"""
+    queryset = Challenge.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ChallengeCreateSerializer
+
+    def create(self, request, *args, **kwargs):
+        in_ser = self.get_serializer(data=request.data, context={"request": request})
+        in_ser.is_valid(raise_exception=True)
+        instance = in_ser.save()
+        out_ser = ChallengeCreateOutSerializer(instance)
+        headers = self.get_success_headers(out_ser.data)
+        return Response(out_ser.data, status=status.HTTP_201_CREATED, headers=headers)
