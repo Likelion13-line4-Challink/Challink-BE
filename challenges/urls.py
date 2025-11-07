@@ -20,4 +20,6 @@ urlpatterns = [
     # 기록 사진 상세 / 댓글
     path("detail/<int:photo_id>/", CompleteImageDetailView.as_view()),
     path("detail/<int:photo_id>/comments/", CommentCreateView.as_view()),
+    
+    path("<int:challenge_id>/albums/", ChallengeImageListView.as_view()),
 ]
