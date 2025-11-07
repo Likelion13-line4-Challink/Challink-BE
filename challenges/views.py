@@ -29,6 +29,9 @@ from .serializers import (
 
     ChallengeCreateSerializer,
     ChallengeCreateOutSerializer,
+
+    ChallengeJoinSerializer,
+    ChallengeJoinOutSerializer,
 )
 from .selectors import (
     get_complete_image_with_comments,
@@ -37,7 +40,7 @@ from .selectors import (
     my_challenges_selector,
     challenge_detail_selector,
 )
-from .services import create_comment
+from .services import create_comment, join_challenge, Conflict
 DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
 
 
@@ -381,3 +384,25 @@ class ChallengeCreateView(generics.CreateAPIView):
         out_ser = ChallengeCreateOutSerializer(instance)
         headers = self.get_success_headers(out_ser.data)
         return Response(out_ser.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+
+class ChallengeJoinView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, challenge_id: int):
+        # 1) 입력 검증
+        in_ser = ChallengeJoinSerializer(data=request.data)
+        in_ser.is_valid(raise_exception=True)
+        agree_terms = in_ser.validated_data.get("agree_terms", False)
+
+        # 2) 서비스 호출 (내부에서 트랜잭션/검증/차감 처리)
+        payload = join_challenge(
+            user=request.user,
+            challenge_id=challenge_id,
+            agree_terms=agree_terms,
+        )
+
+        # 3) 응답 시리얼라이징 + 200
+        out_ser = ChallengeJoinOutSerializer(payload)
+        return Response(out_ser.data, status=status.HTTP_200_OK)
