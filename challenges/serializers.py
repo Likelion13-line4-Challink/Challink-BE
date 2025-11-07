@@ -342,3 +342,21 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
         # 현재는 PROPORTIONAL만 지원 -> 혹시 모르는 값은 기본값으로 통일
         return "PROPORTIONAL"
 
+
+
+
+class ChallengeJoinSerializer(serializers.Serializer):
+    """참가 요청 입력 값 (선택 동의값 등)"""
+    agree_terms = serializers.BooleanField(required=False, default=False)
+
+
+class ChallengeJoinOutSerializer(serializers.Serializer):
+    """참가 성공 응답 스펙 (API 명세서와 동일 키)"""
+    challenge_member_id = serializers.IntegerField()
+    challenge_id = serializers.IntegerField()
+    user_id = serializers.IntegerField()
+    role = serializers.CharField()
+    joined_at = serializers.DateTimeField()
+    entry_fee_charged = serializers.IntegerField()
+    user_point_balance_after = serializers.IntegerField()
+    message = serializers.CharField()
