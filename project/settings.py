@@ -146,6 +146,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ORIGINS = [
     "https://challink.netlify.app",
     "http://localhost:5137",
+    "https://challink.shop",
 ]
 
 # Default primary key field type
