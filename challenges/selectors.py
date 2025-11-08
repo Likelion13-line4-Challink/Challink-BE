@@ -59,12 +59,17 @@ def list_challenges_selector(
     # 3) 카테고리/검색
     if category_id:
         qs = qs.filter(category_id=category_id)
+
     if search:
-        qs = qs.filter(
-            Q(title__icontains=search) |
-            Q(subtitle__icontains=search) |
-            Q(category__name__icontains=search)
-        )
+        search = search.strip()
+        if search.lower().startswith("challink_"):
+            qs = qs.filter(invite_codes__code__iexact=search, invite_codes__expires_at__gte=now)
+        else:
+            qs = qs.filter(
+                Q(title__icontains=search) |
+                Q(subtitle__icontains=search) |
+                Q(category__name__icontains=search)
+            )
 
     # 4) 정렬
     #    - recent: "최신 생성된 챌린지" 우선 → created_at DESC, id DESC

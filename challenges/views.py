@@ -5,17 +5,11 @@ from django.shortcuts import render
 from rest_framework import status, permissions, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.generics import GenericAPIView, ListCreateAPIView
 from main.utils.pagination import StandardPagePagination
 from django.conf import settings
 from .models import CompleteImage, ChallengeMember, Challenge
-
-from rest_framework.permissions import AllowAny
-
-
-
-
 
 
 from .serializers import (
@@ -42,6 +36,51 @@ from .selectors import (
 )
 from .services import create_comment, join_challenge, Conflict
 DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
+
+
+class ChallengeListCreateView(ListCreateAPIView):
+    """
+    GET/POST /challenges/
+    - GET: 공개 목록 (challink_ 초대코드 or 키워드 검색)
+    - POST: 챌린지 생성
+    """
+    permission_classes = [AllowAny]
+    pagination_class = StandardPagePagination
+
+    def get_queryset(self):
+        req = self.request
+        include_full = (req.query_params.get("include_full", "false").lower() == "true")
+        order = req.query_params.get("order", "recent")
+        category_id = req.query_params.get("category_id")
+        search = req.query_params.get("search") or req.query_params.get("q")
+
+        return list_challenges_selector(
+            user=req.user if req.user.is_authenticated else None,
+            include_full_slots=include_full,
+            order=order,
+            category_id=int(category_id) if category_id else None,
+            search=search,
+        )
+
+    def get_serializer_class(self):
+        return ChallengeCardSerializer if self.request.method == "GET" else ChallengeCreateSerializer
+
+    def list(self, request, *args, **kwargs):
+        qs = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(qs)
+        data_qs = page if page is not None else qs
+        ser = ChallengeCardSerializer(data_qs, many=True, context={"request": request})
+        if page is not None:
+            return self.get_paginated_response(ser.data)
+        return Response({"page": 1, "page_size": len(ser.data), "total": len(ser.data), "items": ser.data})
+
+    def create(self, request, *args, **kwargs):
+        # POST 그대로 유지
+        in_ser = ChallengeCreateSerializer(data=request.data, context={"request": request})
+        in_ser.is_valid(raise_exception=True)
+        obj = in_ser.save()
+        out_ser = ChallengeCreateOutSerializer(obj)
+        return Response(out_ser.data, status=201)
 
 
 
@@ -89,38 +128,6 @@ class ChallengeImageListView(APIView):
         serializer = CompleteImageListSerializer(photos, many=True)
         return Response(serializer.data, status=200)
 
-
-class ChallengeListView(GenericAPIView):
-    """
-    GET /challenges/
-    - 공개 목록. 비로그인 허용.
-    - "초대코드 유효기간 = 카드 노출기간" 강제
-    (selectors에서 InviteCode.expires_at >= now 로 필터)
-    - 정렬 기본: 최근 생성(created_at DESC)
-    """
-    permission_classes = [permissions.AllowAny]
-    serializer_class = ChallengeCardSerializer
-    pagination_class = StandardPagePagination
-
-    def get(self, request):
-        include_full = request.query_params.get("include_full", "false").lower() == "true"
-        order = request.query_params.get("order", "recent")  # popular | recent | oldest
-        category_id = request.query_params.get("category_id")
-        search = request.query_params.get("search")
-
-        qs = list_challenges_selector(
-            user=request.user if request.user.is_authenticated else None,
-            include_full_slots=include_full,
-            order=order,
-            category_id=int(category_id) if category_id else None,
-            search=search,
-        )
-
-        page = self.paginate_queryset(qs)
-        data = self.get_serializer(page if page is not None else qs, many=True, context={"request": request}).data
-        if page is not None:
-            return self.get_paginated_response(data)
-        return Response({"page": 1, "page_size": len(data), "total": len(data), "items": data})
 
 
 class MyChallengeListView(GenericAPIView):
@@ -367,23 +374,6 @@ class ChallengeDetailView(GenericAPIView):
         }
         ser = ChallengeDetailForMemberSerializer(payload)
         return Response(ser.data, status=200)
-
-
-
-
-class ChallengeCreateView(generics.CreateAPIView):
-    """POST /challenges/ : 챌린지 생성 전용"""
-    queryset = Challenge.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ChallengeCreateSerializer
-
-    def create(self, request, *args, **kwargs):
-        in_ser = self.get_serializer(data=request.data, context={"request": request})
-        in_ser.is_valid(raise_exception=True)
-        instance = in_ser.save()
-        out_ser = ChallengeCreateOutSerializer(instance)
-        headers = self.get_success_headers(out_ser.data)
-        return Response(out_ser.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 

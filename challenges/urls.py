@@ -2,14 +2,16 @@
 from django.urls import path
 from .views import *
 
-from .views import MyChallengeListView, MyCompletedChallengeListView, \
-    ChallengeDetailView, CompleteImageDetailView, CommentCreateView, ChallengeCreateView
+from .views import (
+    ChallengeListCreateView,
+    MyChallengeListView, MyCompletedChallengeListView,
+    ChallengeDetailView, CompleteImageDetailView, CommentCreateView,
+    ChallengeImageListView, ChallengeJoinView
+)
 
 
 urlpatterns = [
-    # 목록/생성 분리
-    path("list/", ChallengeListView.as_view(), name="challenge-list"),   # GET 전용
-    path("", ChallengeCreateView.as_view(), name="challenge-create"),  # POST 전용
+    path("", ChallengeListCreateView.as_view(), name="challenges"),   # GET/POST /challenges/
 
     path("my/", MyChallengeListView.as_view()),                           # GET /challenges/my/
     path("my/completed/", MyCompletedChallengeListView.as_view()),        # GET /challenges/my/completed/
