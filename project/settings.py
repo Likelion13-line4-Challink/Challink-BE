@@ -145,11 +145,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_ORIGINS = [
     "https://challink.netlify.app",
+    "http://localhost:5137",
 ]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # DRF
