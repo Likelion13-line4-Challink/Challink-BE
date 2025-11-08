@@ -143,7 +143,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_ORIGINS = []
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5137",
+    "https://challink.netlify.app",
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
