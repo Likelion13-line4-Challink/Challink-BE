@@ -51,7 +51,7 @@ def list_challenges_selector(
     # --- (1) 초대코드 검색 여부 분기 ---
     if search and search.strip().lower().startswith("challink_"):
         qs = base_qs.filter(
-            invite_codes__code__iexact=search.strip(),
+            invite_codes__code=search.strip(),   # 대소문자 구분
             invite_codes__expires_at__gte=now
         ).distinct()
     else:
