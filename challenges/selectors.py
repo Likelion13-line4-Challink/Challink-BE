@@ -7,7 +7,8 @@ from typing import Optional, Tuple
 from django.db import models
 from django.db.models import Q, Prefetch
 from django.utils import timezone
-from .models import Challenge, ChallengeMember, CompleteImage
+from .models import Challenge, ChallengeMember, CompleteImage, Comment
+from typing import Optional
 
 
 # 사진 1개 상세 조회 (댓글 포함)
@@ -45,47 +46,52 @@ def list_challenges_selector(
 ):
     now = timezone.now()
 
-    # 1) 카테고리/소유자 join + "유효 초대코드 보유 챌린지" 필터
-    qs = (Challenge.objects
-        .select_related("category", "owner")
-        # 초대코드가 최소 1개 이상, 만료 전이어야 함
-        .filter(invite_codes__expires_at__gte=now)
-        .distinct())  # 동일 챌린지가 invite_codes 개수만큼 중복될 수 있으므로 distinct()
+    base_qs = Challenge.objects.select_related("category", "owner")
 
-    # 2) 정원 제한(기본: 꽉 찬 챌린지는 숨김)
+    # --- (1) 초대코드 검색 여부 분기 ---
+    if search and search.strip().lower().startswith("challink_"):
+        qs = base_qs.filter(
+            invite_codes__code=search.strip(),   # 대소문자 구분
+            invite_codes__expires_at__gte=now
+        ).distinct()
+    else:
+        qs = base_qs.filter(status="active")
+
+        # --- (2) 일반 검색 조건 ---
+        if search and search.strip():
+            keyword = search.strip()
+            qs = qs.filter(
+                Q(title__icontains=keyword) |
+                Q(subtitle__icontains=keyword) |
+                Q(category__name__icontains=keyword)
+            )
+
+    # --- (3) 카테고리 필터 ---
+    if category_id:
+        qs = qs.filter(category_id=category_id)
+
+    # --- (4) 정원 제한 ---
     if not include_full_slots:
         qs = qs.filter(member_count_cache__lt=models.F("member_limit"))
 
-    # 3) 카테고리/검색
-    if category_id:
-        qs = qs.filter(category_id=category_id)
-    if search:
-        qs = qs.filter(
-            Q(title__icontains=search) |
-            Q(subtitle__icontains=search) |
-            Q(category__name__icontains=search)
-        )
-
-    # 4) 정렬
-    #    - recent: "최신 생성된 챌린지" 우선 → created_at DESC, id DESC
-    #    - popular: 참여자 많은 순 → member_count_cache DESC, created_at DESC
-    #    - oldest: created_at ASC
+    # --- (5) 정렬 ---
     if order == "popular":
         qs = qs.order_by("-member_count_cache", "-created_at", "-id")
     elif order == "oldest":
         qs = qs.order_by("created_at", "id")
-    else:  # recent
+    else:  # recent (기본)
         qs = qs.order_by("-created_at", "-id")
 
-    # 5) 로그인 유저 참여 여부 계산을 위한 prefetch (is_joined 판단)
+    # --- (6) 로그인 유저 참여 여부 프리패치 ---
     if user and getattr(user, "is_authenticated", False):
         qs = qs.prefetch_related(
             Prefetch(
                 "members",
                 queryset=ChallengeMember.objects.filter(user=user).only("id", "challenge_id", "user_id"),
-                to_attr="__me_member__",   # serializer에서 is_joined 계산에 사용
+                to_attr="__me_member__",
             )
         )
+
     return qs
 
 
