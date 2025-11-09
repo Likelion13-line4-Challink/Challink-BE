@@ -28,6 +28,9 @@ from .serializers import (
     ChallengeJoinOutSerializer,
 
     ChallengeEndResponseSerializer,
+
+    ChallengeRuleUpdateSerializer,
+    ChallengeRuleUpdateOutSerializer,
 )
 from .selectors import (
     get_complete_image_with_comments,
@@ -418,3 +421,86 @@ class ChallengeEndView(APIView):
         payload = end_challenge(user=request.user, challenge_id=challenge_id)
         serializer = ChallengeEndResponseSerializer(payload)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+class ChallengeRuleUpdateView(APIView):
+    """
+    PATCH /challenges/{challenge_id}/rules
+
+    - 인증: 로그인 필수
+    - 권한: challenge.owner 이거나, ChallengeMember(role='owner')
+    - 상태: status='ended' 인 경우 409 Conflict
+    - 부분 업데이트 허용 (freq_type, freq_n_days, ai_condition_text)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, challenge_id: int):
+        # 1) 챌린지 조회
+        try:
+            challenge = Challenge.objects.get(pk=challenge_id)
+        except Challenge.DoesNotExist:
+            return Response({"detail": "해당 챌린지를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2) 이미 종료된 챌린지는 규칙 변경 불가
+        if challenge.status == "ended":
+            return Response(
+                {"detail": "이미 종료된 챌린지는 규칙을 수정할 수 없습니다."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        user = request.user
+
+        # 3) 권한 체크: 생성자(owner 필드) 또는 멤버 중 role='owner'
+        is_owner_user = (challenge.owner_id == user.id)
+        has_owner_membership = ChallengeMember.objects.filter(
+            challenge=challenge,
+            user=user,
+            role="owner",
+        ).exists()
+
+        if not (is_owner_user or has_owner_membership):
+            return Response(
+                {"detail": "해당 챌린지를 수정할 권한이 없습니다."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 4) 입력 검증 (부분 업데이트)
+        serializer = ChallengeRuleUpdateSerializer(
+            data=request.data,
+            context={"request": request, "challenge": challenge},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if not data:
+            return Response(
+                {"detail": "변경할 필드를 최소 한 개 이상 포함해야 합니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 5) 실제 필드 업데이트
+        # freq_type: API → 모델 매핑 (영문 코드 → 한글)
+        if "freq_type" in data:
+            api_freq = data["freq_type"]
+            challenge.freq_type = ChallengeCreateSerializer.FREQ_IN_MAP[api_freq]
+
+        if "freq_n_days" in data:
+            challenge.freq_n_days = data["freq_n_days"]
+
+        if "ai_condition_text" in data:
+            challenge.ai_condition = data["ai_condition_text"]
+
+        challenge.save()  # updated_at 자동 갱신(auto_now)
+
+        # 6) 응답 payload 구성 (모델 → API 표기)
+        response_payload = {
+            "challenge_id": challenge.id,
+            "freq_type": ChallengeCreateSerializer.FREQ_OUT_MAP.get(challenge.freq_type, "DAILY"),
+            "freq_n_days": challenge.freq_n_days,
+            "ai_condition_text": challenge.ai_condition,
+            "updated_at": challenge.updated_at,
+        }
+        out_ser = ChallengeRuleUpdateOutSerializer(response_payload)
+        return Response(out_ser.data, status=status.HTTP_200_OK)

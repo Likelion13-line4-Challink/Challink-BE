@@ -28,5 +28,7 @@ urlpatterns = [
     
     path("<int:challenge_id>/albums/", ChallengeImageListView.as_view()),
 
+    path("<int:challenge_id>/rules", ChallengeRuleUpdateView.as_view(), name="challenge-rule-update"),
+
     path("<int:challenge_id>/end/", ChallengeEndView.as_view(), name="challenge-end"),
 ]
