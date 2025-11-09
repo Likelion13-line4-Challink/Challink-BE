@@ -22,4 +22,6 @@ urlpatterns = [
     path("detail/<int:photo_id>/comments/", CommentCreateView.as_view()),
 
     path("<int:challenge_id>/join", ChallengeJoinView.as_view(), name="challenge-join"), # POST
+    
+    path("<int:challenge_id>/albums/", ChallengeImageListView.as_view()),
 ]
