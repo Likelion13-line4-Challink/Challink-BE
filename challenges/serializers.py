@@ -3,6 +3,7 @@ from .models import CompleteImage, Comment, Challenge, ChallengeCategory
 
 from django.utils.translation import gettext_lazy as _
 
+from .services import generate_invite_code_for_challenge
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -279,6 +280,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
             # 방어적 코드 (실제로는 validate에서 걸러짐)
             raise serializers.ValidationError({"settlement_method": "현재 지원하지 않는 방식입니다. (지원: PROPORTIONAL)"})
 
+
         challenge = Challenge.objects.create(
             title=validated["title"],
             subtitle="",
@@ -295,7 +297,14 @@ class ChallengeCreateSerializer(serializers.Serializer):
             category=category,
             owner=self.context["request"].user,  # 생성자 자동 지정(creator)
         )
+
+        # 초대코드 생성 (챌린지 생성 직후)
+        invite = generate_invite_code_for_challenge(challenge=challenge)
+        # 나중에 응답 시 추가 쿼리 없이 쓰기 위해 인스턴스에 달아둠
+        setattr(challenge, "_created_invite_code", invite)
+
         return challenge
+
 
 
 class ChallengeCreateOutSerializer(serializers.ModelSerializer):
@@ -310,6 +319,7 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
     freq_n_days = serializers.IntegerField(allow_null=True)
     ai_condition_text = serializers.CharField(source="ai_condition")
     settlement_method = serializers.SerializerMethodField()
+    invite_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
@@ -320,6 +330,7 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
             "freq_type", "freq_n_days",
             "ai_condition_text", "settlement_method",
             "status", "start_date", "end_date",
+            "invite_code",
             "created_at", "updated_at",
         )
 
@@ -341,6 +352,48 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
             return "PROPORTIONAL"
         # 현재는 PROPORTIONAL만 지원 -> 혹시 모르는 값은 기본값으로 통일
         return "PROPORTIONAL"
+
+    # 모델에는 description 필드가 없으므로, 안전하게 빈 문자열로 처리
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if "description" not in data or data["description"] is None:
+            data["description"] = ""  # 스펙에 맞춘 자리 채우기 (명세상 필드 존재)
+        return data
+
+    # 모델 한글 ↔ API 영문
+    def get_freq_type(self, obj):
+        mapper = ChallengeCreateSerializer.FREQ_OUT_MAP
+        return mapper.get(obj.freq_type, "DAILY")
+
+    def get_settlement_method(self, obj):
+        # 런타임에 모델 상수 접근 (안전)
+        if obj.settle_method == Challenge.SettleMethod.PROPORTIONAL:
+            return "PROPORTIONAL"
+        # 현재는 PROPORTIONAL만 지원 -> 혹시 모르는 값은 기본값으로 통일
+        return "PROPORTIONAL"
+
+    def get_invite_code(self, obj):
+        """
+        응답에 포함할 초대코드 정보 구성
+        - 생성 직후에는 obj._created_invite_code 사용
+        - 그 외에는 DB에서 가장 최근 초대코드를 조회
+        """
+        invite = getattr(obj, "_created_invite_code", None)
+        if invite is None:
+            invite = (
+                InviteCode.objects.filter(challenge=obj)
+                .order_by("-created_at")
+                .first()
+            )
+        if not invite:
+            return None
+
+        return {
+            "code": invite.code,
+            "expires_at": invite.expires_at,
+            "case_sensitive": True,
+        }
+
 
 
 

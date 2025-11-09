@@ -1,16 +1,24 @@
-from django.db import transaction
+import random
+import string
+from datetime import datetime, time, timedelta
+
+from django.db import transaction, IntegrityError
 from django.db.models import F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from .models import CompleteImage, Comment
 from django.contrib.auth import get_user_model
-
-from datetime import datetime, date, time, timedelta
 
 from rest_framework.exceptions import APIException, PermissionDenied, NotFound, ValidationError
 from rest_framework import status
 
-from .models import Challenge, ChallengeMember
+from .models import (
+    CompleteImage,
+    Comment,
+    Challenge,
+    ChallengeMember,
+    InviteCode,
+)
+
 
 
 # 댓글 작성 서비스 로직
@@ -41,87 +49,54 @@ class Conflict(APIException):
     default_detail = "요청이 충돌합니다."
 
 
-# @transaction.atomic
-# def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
-#     """
-#     챌린지 참가 처리:
-#     - 상태 검증(active만)
-#     - 중복 참가 금지
-#     - 정원 체크
-#     - entry_fee 차감(부족 시 409)
-#     - ChallengeMember 생성
-#     - member_count_cache 증가
-#     - 결과 payload 리턴
-#     """
-#     # 1) 챌린지 락 걸고 조회
-#     try:
-#         challenge = (
-#             Challenge.objects.select_for_update()
-#             .select_related("owner")
-#             .get(pk=challenge_id)
-#         )
-#     except Challenge.DoesNotExist:
-#         raise NotFound("해당 챌린지를 찾을 수 없습니다.")
-#
-#     # 2) 상태 정책: active만 허용
-#     if challenge.status != "active":
-#         raise PermissionDenied("현재 상태에서는 참가할 수 없습니다.")
-#
-#     # 3) 중복 참가 검사
-#     if ChallengeMember.objects.filter(challenge_id=challenge.id, user_id=user.id).exists():
-#         # 명세에 따라 400 사용
-#         raise ValidationError({"detail": "이미 참가한 사용자입니다."})
-#
-#     # 4) 정원 확인
-#     #   member_limit 이 None 이거나 0이면 무제한으로 간주하지 않고, 현재 모델은 default=6이므로 비교 가능
-#     if challenge.member_limit and challenge.member_count_cache >= challenge.member_limit:
-#         raise Conflict("정원이 가득 찼습니다.")
-#
-#     # 5) 참가비 처리 (entry_fee > 0일 때만)
-#     entry_fee_charged = 0
-#     if challenge.entry_fee and challenge.entry_fee > 0:
-#         # 유저 레코드도 잠금(경합 방지)
-#         user_locked = type(user)._default_manager.select_for_update().get(pk=user.pk)
-#
-#         if (user_locked.point_balance or 0) < challenge.entry_fee:
-#             raise Conflict("포인트가 부족합니다.")
-#
-#         # F()로 차감
-#         type(user_locked)._default_manager.filter(pk=user_locked.pk).update(
-#             point_balance=F("point_balance") - challenge.entry_fee
-#         )
-#         # 최신 잔액 반영
-#         user_locked.refresh_from_db(fields=["point_balance"])
-#         user_point_balance_after = user_locked.point_balance
-#         entry_fee_charged = challenge.entry_fee
-#     else:
-#         user_point_balance_after = getattr(user, "point_balance", 0)
-#
-#     # 6) 멤버 생성
-#     member = ChallengeMember.objects.create(
-#         challenge=challenge,
-#         user=user,
-#         role="member",
-#     )
-#
-#     # 7) 카운터 증가
-#     Challenge.objects.filter(pk=challenge.pk).update(
-#         member_count_cache=F("member_count_cache") + 1
-#     )
-#     challenge.refresh_from_db(fields=["member_count_cache"])
-#
-#     # 8) 결과 payload
-#     payload = {
-#         "challenge_member_id": member.id,
-#         "challenge_id": challenge.id,
-#         "user_id": user.id,
-#         "role": member.role,
-#         "joined_at": member.joined_at,
-#         "entry_fee_charged": entry_fee_charged,
-#         "user_point_balance_after": user_point_balance_after,
-#         "message": "참가가 완료되었습니다.",
-#     }
-#     return payload
+
+
+class Conflict(APIException):
+    status_code = 409
+    default_detail = "요청이 충돌합니다."
+
+
+def generate_invite_code_for_challenge(*, challenge: Challenge, max_attempts: int = 5) -> InviteCode:
+    """
+    챌린지 생성 시 초대코드 1개를 발급한다.
+
+    - 포맷: 'challink_' + 대문자/숫자 6자리
+    - 만료:
+        - end_date가 있으면 그날 23:59:59
+        - 없으면 생성 시각 기준 30일 후
+    - code 유니크 충돌 시 최대 max_attempts번 재시도
+    """
+    alphabet = string.ascii_uppercase + string.digits
+    tz = timezone.get_current_timezone()
+    now = timezone.now().astimezone(tz)
+
+    # 만료 시각 계산
+    if challenge.end_date:
+        expires_at = datetime.combine(
+            challenge.end_date,
+            time(23, 59, 59),
+            tzinfo=tz,
+        )
+    else:
+        expires_at = now + timedelta(days=30)
+
+    # 코드 생성 & 저장 (유니크 충돌 시 재시도)
+    for _ in range(max_attempts):
+        suffix = "".join(random.choices(alphabet, k=6))
+        code = f"challink_{suffix}"
+        try:
+            invite = InviteCode.objects.create(
+                challenge=challenge,
+                code=code,
+                expires_at=expires_at,
+            )
+            return invite
+        except IntegrityError:
+            # code 유니크 충돌 → 다시 시도
+            continue
+
+    # 모든 시도 실패 시 409 반환
+    raise Conflict("초대코드 생성에 실패했습니다. 잠시 후 다시 시도해주세요.")
 
 
 
