@@ -24,11 +24,11 @@ urlpatterns = [
     path("detail/<int:photo_id>/", CompleteImageDetailView.as_view()),
     path("detail/<int:photo_id>/comments/", CommentCreateView.as_view()),
 
-    path("<int:challenge_id>/join", ChallengeJoinView.as_view(), name="challenge-join"), # POST
+    path("<int:challenge_id>/join/", ChallengeJoinView.as_view(), name="challenge-join"), # POST
     
     path("<int:challenge_id>/albums/", ChallengeImageListView.as_view()),
 
-    path("<int:challenge_id>/rules", ChallengeRuleUpdateView.as_view(), name="challenge-rule-update"),
+    path("<int:challenge_id>/rules/", ChallengeRuleUpdateView.as_view(), name="challenge-rule-update"),
 
     path("<int:challenge_id>/end/", ChallengeEndView.as_view(), name="challenge-end"),
 ]
