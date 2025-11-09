@@ -1,3 +1,5 @@
+# 예: aiauthentications/views.py  (원래 이 뷰가 있던 파일 이름으로 넣으면 됨)
+
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -13,7 +15,7 @@ class ChallengeAIVerifyLiteView(APIView):
     POST /aiauth/<int:challenge_id>/auth
     - 이미지 1장 업로드 후, Challenge.ai_condition 기준으로 승인/반려 판정
     - 업로드 즉시 CompleteImage(pending) 생성 → AI 결과 반영
-    - 응답: {challenge_id, user_id, upload_date, approved, reasons[], complete_image{...}}
+    - 응답: {challenge_id, user_id, upload_date, approved, reasons[], complete_image{...}, raw_ai_response}
     """
     permission_classes = [IsAuthenticated]
 
@@ -46,14 +48,15 @@ class ChallengeAIVerifyLiteView(APIView):
             date=timezone.localdate(),
         )
 
-        # 6) AI 판정 (예외가 나도 서비스 내부에서 False/uncertain로 수습)
+        # 6) AI 판정
         verdict = judge_image(ch.ai_condition or "", file)
 
         approved = bool(verdict.get("approved"))
         reasons = verdict.get("reasons") or []
         uncertain = bool(verdict.get("uncertain"))
+        raw_resp = verdict.get("raw")
 
-        # ✅ 상태 결정 규칙: 불확실하면 pending 유지
+        # 7) 상태 결정
         if uncertain:
             ci.status = CompleteImage.Status.PENDING
             ci.reviewed_at = None
@@ -64,13 +67,14 @@ class ChallengeAIVerifyLiteView(APIView):
         ci.review_reasons = "\n".join(reasons)
         ci.save(update_fields=["status", "reviewed_at", "review_reasons"])
 
-        # 8) 표준 응답
+        # 8) 응답
         body = {
             "challenge_id": ch.id,
             "user_id": request.user.id,
             "upload_date": str(ci.date),
             "approved": approved,
             "reasons": reasons,
+            "raw_ai_response": raw_resp,
             "complete_image": {
                 "id": ci.id,
                 "image_url": getattr(ci.image, "url", None),

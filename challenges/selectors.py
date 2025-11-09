@@ -26,14 +26,18 @@ def get_complete_image_with_comments(photo_id: int):
 
 # 챌린지 내 모든 사진 조회 (+ 이름 필터링)
 def get_challenge_images(challenge_id: int, name: str = None):
-    qs = CompleteImage.objects.select_related("user", "challenge_member__challenge").filter(
-        challenge_member__challenge_id=challenge_id
-    )
+    qs = (CompleteImage.objects
+            .select_related("user", "challenge_member__challenge")
+            .filter(
+                challenge_member__challenge_id=challenge_id,
+                status="approved",                 # 🔹 승인된 사진만
+            ))
 
     if name and name.strip():
         qs = qs.filter(user__name__icontains=name.strip())
 
     return qs.order_by("-created_at")
+
 
 
 def list_challenges_selector(
