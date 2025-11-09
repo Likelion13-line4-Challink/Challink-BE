@@ -1,4 +1,5 @@
-# challenges/urls.py
+from tkinter.font import names
+
 from django.urls import path
 from .views import *
 
@@ -6,7 +7,7 @@ from .views import (
     ChallengeListCreateView,
     MyChallengeListView, MyCompletedChallengeListView,
     ChallengeDetailView, CompleteImageDetailView, CommentCreateView,
-    ChallengeImageListView, ChallengeJoinView
+    ChallengeImageListView, ChallengeJoinView, ChallengeEndView,
 )
 
 
@@ -26,4 +27,6 @@ urlpatterns = [
     path("<int:challenge_id>/join", ChallengeJoinView.as_view(), name="challenge-join"), # POST
     
     path("<int:challenge_id>/albums/", ChallengeImageListView.as_view()),
+
+    path("<int:challenge_id>/end/", ChallengeEndView.as_view(), name="challenge-end"),
 ]
