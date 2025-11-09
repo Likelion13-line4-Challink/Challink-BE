@@ -26,6 +26,8 @@ from .serializers import (
 
     ChallengeJoinSerializer,
     ChallengeJoinOutSerializer,
+
+    ChallengeEndResponseSerializer,
 )
 from .selectors import (
     get_complete_image_with_comments,
@@ -34,7 +36,7 @@ from .selectors import (
     my_challenges_selector,
     challenge_detail_selector,
 )
-from .services import create_comment, join_challenge, Conflict
+from .services import create_comment, join_challenge, Conflict, end_challenge
 DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
 
 
@@ -396,3 +398,21 @@ class ChallengeJoinView(APIView):
         # 3) 응답 시리얼라이징 + 200
         out_ser = ChallengeJoinOutSerializer(payload)
         return Response(out_ser.data, status=status.HTTP_200_OK)
+
+
+
+
+class ChallengeEndView(APIView):
+    """
+    POST /challenges/{challenge_id}/end
+
+    - 챌린지 생성자 또는 운영자만 호출 가능
+    - 챌린지 상태를 ended 로 변경
+    - 정산 예약 정보(scheduled_at, status)를 함께 응답
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, challenge_id: int):
+        payload = end_challenge(user=request.user, challenge_id=challenge_id)
+        serializer = ChallengeEndResponseSerializer(payload)
+        return Response(serializer.data, status=status.HTTP_200_OK)

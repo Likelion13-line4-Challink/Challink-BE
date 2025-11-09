@@ -360,3 +360,17 @@ class ChallengeJoinOutSerializer(serializers.Serializer):
     entry_fee_charged = serializers.IntegerField()
     user_point_balance_after = serializers.IntegerField()
     message = serializers.CharField()
+
+
+
+# 챌린지 종료 응답용 시리얼라이저
+class ChallengeSettlementInfoSerializer(serializers.Serializer):
+    scheduled_at = serializers.DateTimeField()
+    status = serializers.CharField()
+
+
+class ChallengeEndResponseSerializer(serializers.Serializer):
+    challenge_id = serializers.IntegerField()
+    status = serializers.CharField()
+    ended_at = serializers.DateTimeField()
+    settlement = ChallengeSettlementInfoSerializer()
