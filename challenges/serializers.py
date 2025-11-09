@@ -374,3 +374,80 @@ class ChallengeEndResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
     ended_at = serializers.DateTimeField()
     settlement = ChallengeSettlementInfoSerializer()
+
+
+
+
+
+
+
+class ChallengeRuleUpdateSerializer(serializers.Serializer):
+    """
+    PATCH /challenges/{challenge_id}/rules 요청용 입력 스키마
+    - 부분 업데이트 가능
+    - freq_type / freq_n_days / ai_condition_text 중 일부만 보내도 됨
+    """
+    # API에서 사용하는 영문 코드 기준
+    freq_type = serializers.ChoiceField(
+        choices=["DAILY", "WEEKDAYS", "WEEKENDS", "N_DAYS_PER_WEEK"],
+        required=False,
+    )
+    freq_n_days = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=1,
+        max_value=6,
+    )
+    ai_condition_text = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
+
+    def validate(self, attrs):
+        """
+        - freq_type, freq_n_days가 함께/단독으로 들어와도 규칙을 지키도록 검증
+        - challenge 현재 상태까지 고려해서 N_DAYS_PER_WEEK 규칙 체크
+        """
+        challenge = self.context["challenge"]  # view에서 넣어줄 것
+
+        # 최종적으로 적용될 freq_type(모델 값: "매일", "평일", "주말", "주 N일")
+        if "freq_type" in attrs:
+            # API → 모델 매핑 재사용
+            target_freq_type_model = ChallengeCreateSerializer.FREQ_IN_MAP[attrs["freq_type"]]
+        else:
+            target_freq_type_model = challenge.freq_type
+
+        # 최종적으로 적용될 freq_n_days
+        if "freq_n_days" in attrs:
+            target_freq_n_days = attrs["freq_n_days"]
+        else:
+            target_freq_n_days = challenge.freq_n_days
+
+        # 규칙 1) 주 N일인 경우 freq_n_days 반드시 필요
+        if target_freq_type_model == "주 N일":
+            if target_freq_n_days is None:
+                raise serializers.ValidationError({
+                    "freq_n_days": "freq_type이 N_DAYS_PER_WEEK인 경우 1~6 사이 정수를 반드시 보내야 합니다."
+                })
+
+        # 규칙 2) 주 N일이 아닌데 freq_n_days를 보내면 안 됨
+        if target_freq_type_model != "주 N일":
+            # attrs에 명시적으로 freq_n_days가 들어온 경우만 검사
+            if "freq_n_days" in attrs and attrs["freq_n_days"] not in (None,):
+                raise serializers.ValidationError({
+                    "freq_n_days": "이 freq_type에서는 freq_n_days를 보내지 않습니다."
+                })
+
+        return attrs
+
+
+class ChallengeRuleUpdateOutSerializer(serializers.Serializer):
+    """
+    PATCH /challenges/{challenge_id}/rules 응답 스키마
+    API 명세서의 정상 응답 형식과 동일
+    """
+    challenge_id = serializers.IntegerField()
+    freq_type = serializers.CharField()
+    freq_n_days = serializers.IntegerField(allow_null=True)
+    ai_condition_text = serializers.CharField()
+    updated_at = serializers.DateTimeField()
