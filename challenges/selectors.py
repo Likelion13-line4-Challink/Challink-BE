@@ -86,17 +86,37 @@ def list_challenges_selector(
     else:  # recent (기본)
         qs = qs.order_by("-created_at", "-id")
 
-    # --- (6) 로그인 유저 참여 여부 프리패치 ---
+
+    # --- (6) 로그인 유저 참여 여부 매핑 ---
+    # N+1 방지를 위해 한 번에 내가 속한 멤버십을 가져와서
+    # 각 Challenge 객체에 __me_member__ 속성으로 붙여준다.
     if user and getattr(user, "is_authenticated", False):
-        qs = qs.prefetch_related(
-            Prefetch(
-                "members",
-                queryset=ChallengeMember.objects.filter(user=user).only("id", "challenge_id", "user_id"),
-                to_attr="__me_member__",
-            )
+        # 우선 현재 쿼리셋에서 챌린지 id들을 한 번에 뽑는다.
+        challenge_ids = list(qs.values_list("id", flat=True))
+
+        # 내가 참여 중인 멤버십들만 조회
+        memberships = (
+            ChallengeMember.objects
+            .filter(user=user, challenge_id__in=challenge_ids)
+            .only("id", "challenge_id", "user_id", "role", "joined_at")
         )
 
+        # challenge_id 별로 묶어두기
+        member_map = {}
+        for m in memberships:
+            member_map.setdefault(m.challenge_id, []).append(m)
+
+        # 쿼리셋을 리스트로 평가하고, 각 객체에 __me_member__ 속성을 붙인다.
+        challenge_list = list(qs)
+        for ch in challenge_list:
+            setattr(ch, "__me_member__", member_map.get(ch.id, []))
+
+        # ListCreateAPIView 에서는 리스트도 그대로 사용 가능
+        return challenge_list
+
+    # 로그인 유저가 아니면 그냥 원래 쿼리셋 반환
     return qs
+
 
 
 def my_challenges_selector(
