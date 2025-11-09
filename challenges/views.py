@@ -112,6 +112,8 @@ class CommentCreateView(APIView):
             photo_id=photo_id,
             user=request.user,
             content=serializer.validated_data["content"],
+            x_ratio=serializer.validated_data.get("x_ratio"),
+            y_ratio=serializer.validated_data.get("y_ratio"),
         )
 
         # 응답: 생성된 댓글 정보 반환
