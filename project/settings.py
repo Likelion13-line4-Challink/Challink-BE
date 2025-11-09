@@ -146,6 +146,15 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ORIGINS = [
     "https://challink.netlify.app",
     "http://localhost:5137",
+    "http://127.0.0.1:5137",
+    "https://challink.shop",
+]
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://challink.netlify.app",
+    "http://localhost:5137",
+    "http://127.0.0.1:5137",
     "https://challink.shop",
 ]
 
