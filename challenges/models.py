@@ -131,10 +131,17 @@ class CompleteImage(models.Model):
     comment_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # NEW: AI 판정 완료 시각
+    # AI 판정 완료 시각
     reviewed_at = models.DateTimeField(null=True, blank=True)
-    # NEW: 반려 사유 저장(줄바꿈으로 누적)
+    # 반려 사유 저장(줄바꿈으로 누적)
     review_reasons = models.TextField(blank=True, default="")
+    
+    file_sha1 = models.CharField(max_length=40, null=True, blank=True, db_index=True)  # 40 hex
+    phash = models.BigIntegerField(null=True, blank=True, db_index=True)
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    # 빠른 정책 로그용 필드
+    flagged_duplicate = models.BooleanField(default=False)
 
     class Meta:
         db_table = "challenges_complete_image"

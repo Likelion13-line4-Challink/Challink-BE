@@ -1,5 +1,3 @@
-# 예: aiauthentications/views.py  (원래 이 뷰가 있던 파일 이름으로 넣으면 됨)
-
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,6 +6,11 @@ from rest_framework.permissions import IsAuthenticated
 from challenges.models import Challenge, ChallengeMember, CompleteImage
 from .serializers import AIVerifyImageSerializer
 from .gemini_service import judge_image
+
+# 로컬 중복 판정 유틸 (동일 파일 / pHash 유사)
+from .utils.image_hashing import calc_sha1, calc_phash, hamming_distance64
+
+PHASH_THRESHOLD = 6  # pHash 해밍거리 임계값(권장 6~8 사이 조정)
 
 
 class ChallengeAIVerifyLiteView(APIView):
@@ -39,6 +42,25 @@ class ChallengeAIVerifyLiteView(APIView):
         # 4) 파일 추출
         file = ser.validated_data["image"]
 
+        # ─────────────────────────────────────────────────────────────────
+        # [A-1] 동일 파일(SHA-1) 즉시 차단
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            file_sha1 = calc_sha1(file)
+        except Exception as e:
+            return Response({"detail": f"Hash error: {e}"}, status=400)
+
+        # 같은 유저가 동일 파일 업로드 → 즉시 반려
+        if CompleteImage.objects.filter(user=request.user, file_sha1=file_sha1).exists():
+            return Response({
+                "challenge_id": challenge_id,
+                "user_id": request.user.id,
+                "approved": False,
+                "reasons": ["Duplicate upload: identical file (SHA-1 match)"],
+                "raw_ai_response": None,
+                "complete_image": None
+            }, status=200)
+
         # 5) 먼저 pending 객체 생성(업로드 기록 보존)
         ci = CompleteImage.objects.create(
             challenge_member=cm,
@@ -46,7 +68,42 @@ class ChallengeAIVerifyLiteView(APIView):
             image=file,
             status=CompleteImage.Status.PENDING,
             date=timezone.localdate(),
+            file_sha1=file_sha1,               # ← 저장
         )
+
+        # ─────────────────────────────────────────────────────────────────
+        # [A-2] pHash 계산 및 같은 챌린지 내 유사 보류(flagged_duplicate)
+        # ─────────────────────────────────────────────────────────────────
+        phash_val = None
+        try:
+            # 저장된 파일 핸들 기준으로 pHash 계산
+            phash_val = calc_phash(ci.image)
+            ci.phash = phash_val
+            ci.save(update_fields=["phash"])
+        except Exception:
+            phash_val = None  # pHash 실패는 치명적 아님
+
+        flagged = False
+        similar_ids = []
+        if phash_val is not None:
+            # 같은 챌린지의 기존 pHash들과 해밍거리 비교 (최근 N개로 제한 가능)
+            candidates = (
+                CompleteImage.objects
+                .filter(challenge_member__challenge_id=challenge_id, phash__isnull=False)
+                .exclude(id=ci.id)
+                .only("id", "phash")[:500]
+            )
+            for other in candidates:
+                if hamming_distance64(phash_val, other.phash) <= PHASH_THRESHOLD:
+                    flagged = True
+                    similar_ids.append(other.id)
+                    if len(similar_ids) >= 3:  # 충분하면 중단해도 됨
+                        break
+
+        if flagged:
+            # 보수적 운영: 보류 플래그만 세우고 최종 상태는 AI/사람 검수로 결정
+            ci.flagged_duplicate = True
+            ci.save(update_fields=["flagged_duplicate"])
 
         # 6) AI 판정
         verdict = judge_image(ch.ai_condition or "", file)
@@ -55,6 +112,10 @@ class ChallengeAIVerifyLiteView(APIView):
         reasons = verdict.get("reasons") or []
         uncertain = bool(verdict.get("uncertain"))
         raw_resp = verdict.get("raw")
+
+        # 유사 보류를 응답 사유에 표시(원하면 비활성화해도 됨)
+        if ci.flagged_duplicate and "Possible duplicate (pHash)" not in reasons:
+            reasons = ["Possible duplicate (pHash)"] + reasons
 
         # 7) 상태 결정
         if uncertain:
@@ -81,6 +142,8 @@ class ChallengeAIVerifyLiteView(APIView):
                 "status": ci.status,
                 "created_at": ci.created_at,
                 "reviewed_at": ci.reviewed_at,
+                "flagged_duplicate": getattr(ci, "flagged_duplicate", False),
+                "similar_example_ids": similar_ids,  # 참고용
             },
         }
         return Response(body, status=200)
