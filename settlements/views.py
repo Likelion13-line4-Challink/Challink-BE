@@ -6,6 +6,9 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from rest_framework import serializers
+from rest_framework import status, permissions
+
 from challenges.models import Challenge, ChallengeMember
 from .models import Settlement, SettlementDetail
 from .selectors import get_or_create_settlement, collect_progress, _required_days
@@ -139,3 +142,58 @@ class RewardClaimView(APIView):
             "wallet_after": request.user.point_balance,
             "message": "정산 보상이 지갑에 적립되었습니다."
         }, status=200)
+
+
+
+
+
+
+class WalletChargeSerializer(serializers.Serializer):
+    """지갑 충전 요청 바디 검증용"""
+    amount = serializers.IntegerField(min_value=1)
+    description = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True
+    )
+
+
+
+class WalletChargeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        amount = request.data.get("amount")
+        description = request.data.get("description") or ""
+
+        # 1) amount 검증
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            raise ValidationError({"amount": "유효한 숫자를 입력해주세요."})
+        if amount <= 0:
+            raise ValidationError({"amount": "0보다 큰 값만 허용됩니다."})
+
+        user = request.user
+
+        with transaction.atomic():
+            # apply_points(변화량, type, challenge, description)
+            history = user.apply_points(amount, "charge", None, description)
+
+        return Response(
+            {
+                "user_id": user.id,
+                "charged_amount": amount,
+                "point_balance_after": history.balance_after,
+                "history": {
+                    # id 대신 pk 사용
+                    "point_history_id": history.pk,
+                    "type": history.type,
+                    "amount": history.amount,
+                    "balance_after": history.balance_after,
+                    "description": history.description,
+                    "created_at": history.created_at,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
