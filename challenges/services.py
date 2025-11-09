@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from .models import CompleteImage, Comment
 from django.contrib.auth import get_user_model
 
+from datetime import datetime, date, time, timedelta
 
 from rest_framework.exceptions import APIException, PermissionDenied, NotFound, ValidationError
 from rest_framework import status
@@ -165,7 +166,7 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
 
     # 5) 참가비 처리 (entry_fee > 0일 때만)
     entry_fee_charged = 0
-    User = get_user_model()  # ✅ 모델 클래스 확보 (지연객체가 아님)
+    User = get_user_model()  # 모델 클래스 확보 (지연객체가 아님)
     if challenge.entry_fee and challenge.entry_fee > 0:
         # 유저 레코드에 락
         u = User.objects.select_for_update().get(pk=user.pk)
@@ -207,3 +208,79 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
         "user_point_balance_after": user_point_balance_after,
         "message": "참가가 완료되었습니다.",
     }
+
+
+
+
+
+
+@transaction.atomic
+def end_challenge(*, user, challenge_id: int) -> dict:
+    """
+    챌린지 종료 처리 서비스.
+    - Challenge를 행 락(select_for_update)으로 가져옴
+    - 권한 체크: owner 이거나 운영자(예: is_staff)만 가능
+    - 이미 ended 상태면 ALREADY_ENDED 에러
+    - status 를 ended 로 변경
+    - ended_at = 지금 시간
+    - settlement.scheduled_at = '챌린지 종료일의 다음날 0시' 기준으로 계산
+    - 응답 payload(dict)를 리턴
+    """
+
+    # 1) 챌린지 조회 + 락
+    try:
+        challenge = (
+            Challenge.objects.select_for_update()
+            .select_related("owner")
+            .get(pk=challenge_id)
+        )
+    except Challenge.DoesNotExist:
+        raise NotFound("해당 챌린지를 찾을 수 없습니다.")
+
+    # 2) 권한 체크: 생성자(owner) 이거나 운영자(여기선 is_staff 기준)만 허용
+    is_owner = (challenge.owner_id == user.id)
+    is_operator = getattr(user, "is_staff", False)
+
+    if not (is_owner or is_operator):
+        # 명세에 맞춘 에러 포맷
+        raise PermissionDenied(
+            {"error": "FORBIDDEN", "message": "종료 권한이 없습니다."}
+        )
+
+    # 3) 이미 종료된 챌린지인지 체크
+    if challenge.status == "ended":
+        raise ValidationError(
+            {"error": "ALREADY_ENDED", "message": "이미 종료된 챌린지입니다."}
+        )
+
+    # 4) 상태 변경 및 종료 시각 기록
+    now = timezone.now()
+    challenge.status = "ended"
+    # updated_at 이 auto_now=True 라면 아래 update_fields 에 넣지 않아도 자동으로 갱신됨
+    challenge.save(update_fields=["status"])
+
+    # 5) 정산 예정 시간 계산
+    #    - 기본 정책: "챌린지 종료일 + 1일"의 00:00
+    #    - end_date 가 비어 있으면, 오늘 날짜 기준으로 계산
+    base_end_date: date = challenge.end_date or now.date()
+    scheduled_date = base_end_date + timedelta(days=1)
+
+    # 현재 타임존의 자정으로 만들기
+    current_tz = timezone.get_current_timezone()
+    scheduled_at = datetime.combine(
+        scheduled_date,
+        time(0, 0, 0),
+        tzinfo=current_tz,
+    )
+
+    # 6) 응답 payload 구성
+    payload = {
+        "challenge_id": challenge.id,
+        "status": challenge.status,
+        "ended_at": now,
+        "settlement": {
+            "scheduled_at": scheduled_at,
+            "status": "scheduled",
+        },
+    }
+    return payload
