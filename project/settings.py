@@ -175,6 +175,6 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),  # 로그인 응답의 expires_in=3600과 일치
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),  # 연장
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=90),
 }
