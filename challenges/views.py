@@ -31,6 +31,9 @@ from .serializers import (
 
     ChallengeRuleUpdateSerializer,
     ChallengeRuleUpdateOutSerializer,
+
+    InviteCodeJoinInSerializer,
+    InviteCodeJoinOutSerializer,
 )
 from .selectors import (
     get_complete_image_with_comments,
@@ -39,7 +42,7 @@ from .selectors import (
     my_challenges_selector,
     challenge_detail_selector,
 )
-from .services import create_comment, join_challenge, Conflict, end_challenge
+from .services import create_comment, join_challenge, Conflict, end_challenge, validate_invite_code_and_build_join_payload
 DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
 
 
@@ -503,4 +506,36 @@ class ChallengeRuleUpdateView(APIView):
             "updated_at": challenge.updated_at,
         }
         out_ser = ChallengeRuleUpdateOutSerializer(response_payload)
+        return Response(out_ser.data, status=status.HTTP_200_OK)
+
+
+
+
+
+
+class InviteCodeJoinView(APIView):
+    """
+    POST /invites/join
+
+    - 인증: 로그인 필수
+    - Body: {"invite_code": "challink_XXXXXX"}
+    - 기능: 초대코드 유효성 검증 + 참가 가능 여부(already_joined / can_join / message) 반환
+    - 실제 챌린지 참가(ChallengeMember 생성)는 여기서 하지 않음.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # 1) 입력 검증
+        in_ser = InviteCodeJoinInSerializer(data=request.data)
+        in_ser.is_valid(raise_exception=True)
+        invite_code = in_ser.validated_data["invite_code"]
+
+        # 2) 서비스 호출 (초대코드 검증 + 상태 계산)
+        payload = validate_invite_code_and_build_join_payload(
+            user=request.user,
+            invite_code=invite_code,
+        )
+
+        # 3) 응답 시리얼라이즈 + 200 OK
+        out_ser = InviteCodeJoinOutSerializer(payload)
         return Response(out_ser.data, status=status.HTTP_200_OK)

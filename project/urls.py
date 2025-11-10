@@ -18,10 +18,15 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from challenges.views import InviteCodeJoinView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("accounts.urls")),
     path("challenges/", include("challenges.urls")),
     path("aiauth/", include("aiauthentications.urls")),
     path("challenges/", include("settlements.urls")),
+
+    # 초대코드 검증 엔드포인트
+    path("invites/join/", InviteCodeJoinView.as_view(), name="invite-join"),
 ]
