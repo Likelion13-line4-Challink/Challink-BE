@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CompleteImage, Comment, Challenge, ChallengeCategory
+from .models import CompleteImage, Comment, Challenge, ChallengeCategory,InviteCode
 
 from django.utils.translation import gettext_lazy as _
 
@@ -504,3 +504,44 @@ class ChallengeRuleUpdateOutSerializer(serializers.Serializer):
     freq_n_days = serializers.IntegerField(allow_null=True)
     ai_condition_text = serializers.CharField()
     updated_at = serializers.DateTimeField()
+
+
+
+class InviteCodeJoinInSerializer(serializers.Serializer):
+    """
+    POST /invites/join 요청용 입력 스키마
+    {
+      "invite_code": "challink_XXXXXX"
+    }
+    """
+    invite_code = serializers.CharField()
+
+    def validate_invite_code(self, value):
+        code = value.strip()
+        if not code:
+            raise serializers.ValidationError("invite_code는 비어 있을 수 없습니다.")
+        return code
+
+
+class InviteCodeJoinOutSerializer(serializers.Serializer):
+    """
+    초대코드 검증 결과 응답 스키마
+    - 이미 참여: 최소 정보 + already_joined, can_join, message
+    - 아직 미참여: 챌린지 상세 정보 + already_joined, can_join, message
+    """
+    challenge_id = serializers.IntegerField()
+    challenge_title = serializers.CharField()
+    challenge_description = serializers.CharField(required=False, allow_blank=True)
+    entry_fee = serializers.IntegerField(required=False)
+    duration_weeks = serializers.IntegerField(required=False)
+    freq_type = serializers.CharField(required=False, allow_null=True)
+    freq_n_days = serializers.IntegerField(required=False, allow_null=True)
+    ai_condition_text = serializers.CharField(required=False, allow_blank=True)
+    settlement_method = serializers.CharField(required=False)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+
+    already_joined = serializers.BooleanField()
+    can_join = serializers.BooleanField()
+    challenge_member_id = serializers.IntegerField(required=False, allow_null=True)
+    message = serializers.CharField()

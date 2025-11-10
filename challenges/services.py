@@ -56,6 +56,17 @@ class Conflict(APIException):
     default_detail = "요청이 충돌합니다."
 
 
+
+class Gone(APIException):
+    """
+    410 Gone (만료된 초대코드 등)에 사용
+    """
+    status_code = status.HTTP_410_GONE
+    default_detail = "리소스가 만료되었습니다."
+
+
+
+
 def generate_invite_code_for_challenge(*, challenge: Challenge, max_attempts: int = 5) -> InviteCode:
     """
     챌린지 생성 시 초대코드 1개를 발급한다.
@@ -259,3 +270,123 @@ def end_challenge(*, user, challenge_id: int) -> dict:
         },
     }
     return payload
+
+
+
+
+
+
+
+
+def _map_freq_type_model_to_api(freq_type: str) -> str:
+    """
+    Challenge 모델의 한글 freq_type → API용 영문 코드 매핑
+    """
+    mapping = {
+        "매일": "DAILY",
+        "평일": "WEEKDAYS",
+        "주말": "WEEKENDS",
+        "주 N일": "N_DAYS_PER_WEEK",
+    }
+    return mapping.get(freq_type, "DAILY")
+
+
+def _map_settlement_method_to_api(settle_method: int) -> str:
+    """
+    Challenge.SettleMethod → API 문자열 매핑
+    현재는 PROPORTIONAL만 사용.
+    """
+    if settle_method == Challenge.SettleMethod.PROPORTIONAL:
+        return "PROPORTIONAL"
+    # 방어적 기본값
+    return "PROPORTIONAL"
+
+
+def validate_invite_code_and_build_join_payload(*, user, invite_code: str) -> dict:
+    """
+    초대코드 검증 및 참가 가능 상태 계산
+
+    - 404: 코드 존재하지 않음
+    - 410: 코드 만료
+    - 이미 참여: already_joined=true, can_join=false
+    - 미참여:
+        - 상태/정원/포인트 등을 보고 can_join / message 결정
+        - 실제 참가(ChallengeMember 생성)는 여기서 하지 않음
+    """
+    now = timezone.now()
+
+    try:
+        invite = (
+            InviteCode.objects
+            .select_related("challenge")
+            .get(code=invite_code)
+        )
+    except InviteCode.DoesNotExist:
+        # 404 Not Found
+        raise NotFound("해당 초대코드를 찾을 수 없습니다.")
+
+    # 만료 체크
+    if invite.expires_at <= now:
+        # 410 Gone
+        raise Gone("초대코드가 만료되었습니다.")
+
+    challenge: Challenge = invite.challenge
+
+    # 이미 이 챌린지에 참여했는지 확인
+    my_member = (
+        ChallengeMember.objects
+        .filter(challenge=challenge, user=user)
+        .only("id")
+        .first()
+    )
+
+    if my_member:
+        # 명세: 이미 참여 중인 경우
+        return {
+            "challenge_id": challenge.id,
+            "challenge_title": challenge.title,
+            "already_joined": True,
+            "can_join": False,
+            "challenge_member_id": my_member.id,
+            "message": "이미 이 챌린지에 참여 중입니다.",
+        }
+
+    # 아직 참여 안 했을 때: 참가 가능 여부 계산
+    # 기본값: 참가 가능
+    can_join = True
+    message = "참가 약관에 동의하면 참가할 수 있습니다."
+
+    # 1) 상태 체크: active 만 참가 가능
+    if challenge.status != "active":
+        can_join = False
+        message = "현재 활성 상태가 아닌 챌린지입니다."
+    # 2) 정원 체크
+    elif challenge.member_limit and challenge.member_count_cache >= challenge.member_limit:
+        can_join = False
+        message = "정원이 가득 찼습니다."
+    else:
+        # 3) 참가비(포인트) 체크
+        entry_fee = challenge.entry_fee or 0
+        user_balance = getattr(user, "point_balance", 0) or 0
+
+        if entry_fee > 0 and user_balance < entry_fee:
+            can_join = False
+            message = "참가하기에 포인트가 부족합니다."
+
+    # 응답 payload 구성 (명세 예시에 맞게)
+    return {
+        "challenge_id": challenge.id,
+        "challenge_title": challenge.title,
+        "challenge_description": challenge.subtitle or "",
+        "entry_fee": challenge.entry_fee,
+        "duration_weeks": challenge.duration_weeks,
+        "freq_type": _map_freq_type_model_to_api(challenge.freq_type),
+        "freq_n_days": challenge.freq_n_days,
+        "ai_condition_text": challenge.ai_condition,
+        "settlement_method": _map_settlement_method_to_api(challenge.settle_method),
+        "start_date": challenge.start_date,
+        "end_date": challenge.end_date,
+        "already_joined": False,
+        "can_join": can_join,
+        "message": message,
+    }
