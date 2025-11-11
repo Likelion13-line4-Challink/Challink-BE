@@ -143,11 +143,23 @@ MEDIA_ROOT = BASE_DIR / "media"
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_ORIGINS = []
+CORS_ALLOW_ORIGINS = [
+    "https://challink.netlify.app",
+    "http://localhost:5137",
+    "http://127.0.0.1:5137",
+    "https://challink.shop",
+]
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://challink.netlify.app",
+    "http://localhost:5137",
+    "http://127.0.0.1:5137",
+    "https://challink.shop",
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # DRF
@@ -163,6 +175,6 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),  # 로그인 응답의 expires_in=3600과 일치
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),  # 연장
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=90),
 }
