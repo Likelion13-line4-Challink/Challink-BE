@@ -236,10 +236,13 @@ class ChallengeCreateSerializer(serializers.Serializer):
 
     # settlement 매핑 (모델 choices 참조)
 
-    SUPPORTED_SETTLEMENT_METHODS = {"PROPORTIONAL"}
-
-    # ChoiceField도 같이 줄이기
-    settlement_method = serializers.ChoiceField(choices=["PROPORTIONAL"])
+    SUPPORTED_SETTLEMENT_METHODS = {
+        "N_TO_ONE_WINNER": Challenge.SettleMethod.N_TO_ONE_WINNER,
+        "PROPORTIONAL": Challenge.SettleMethod.PROPORTIONAL,
+        "REFUND_PLUS_ALL": Challenge.SettleMethod.REFUND_PLUS_ALL,
+        "DONATE_FAIL_FEE": Challenge.SettleMethod.DONATE_FAIL_FEE,
+    }
+    settlement_method = serializers.ChoiceField(choices=list(SUPPORTED_SETTLEMENT_METHODS.keys()))
 
 
     def validate(self, attrs):
@@ -259,7 +262,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
         # settlement 지원 여부
         if attrs["settlement_method"] not in self.SUPPORTED_SETTLEMENT_METHODS:
             raise serializers.ValidationError({
-                "settlement_method": "현재 지원하지 않는 방식입니다. (지원: PROPORTIONAL)"
+                "settlement_method": "지원하지 않는 정산 방식입니다."
             })
 
         return attrs
@@ -274,11 +277,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
         # API → 모델 매핑
         freq_type_model = self.FREQ_IN_MAP[validated["freq_type"]]
         method_str = validated["settlement_method"]  # 현재는 PROPORTIONAL만 지원
-        if method_str == "PROPORTIONAL":
-            settle_model = Challenge.SettleMethod.PROPORTIONAL
-        else:
-            # 방어적 코드 (실제로는 validate에서 걸러짐)
-            raise serializers.ValidationError({"settlement_method": "현재 지원하지 않는 방식입니다. (지원: PROPORTIONAL)"})
+        settle_model = self.SUPPORTED_SETTLEMENT_METHODS[method_str]
 
 
         challenge = Challenge.objects.create(
