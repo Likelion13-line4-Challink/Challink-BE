@@ -25,7 +25,11 @@ class Challenge(models.Model):
 
     title = models.CharField(max_length=200)
     subtitle = models.CharField(max_length=200, blank=True, default="")
-    cover_image = models.URLField(blank=True, default="")
+    cover_image = models.ImageField (
+    upload_to="challenge_covers/",
+    blank=True,
+    null=True
+    )
 
     entry_fee = models.PositiveIntegerField(default=0)
     duration_weeks = models.PositiveIntegerField(default=1)

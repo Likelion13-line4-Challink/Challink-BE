@@ -14,11 +14,10 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
-
-from challenges.views import InviteCodeJoinView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -26,7 +25,7 @@ urlpatterns = [
     path("challenges/", include("challenges.urls")),
     path("aiauth/", include("aiauthentications.urls")),
     path("challenges/", include("settlements.urls")),
-
-    # 초대코드 검증 엔드포인트
-    path("invites/join/", InviteCodeJoinView.as_view(), name="invite-join"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)    
