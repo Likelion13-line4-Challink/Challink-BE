@@ -1,6 +1,7 @@
 from datetime import timedelta
 from django.utils import timezone
 
+
 from django.shortcuts import render
 from rest_framework import status, permissions, generics
 from rest_framework.response import Response
@@ -10,6 +11,7 @@ from rest_framework.generics import GenericAPIView, ListCreateAPIView
 from main.utils.pagination import StandardPagePagination
 from django.conf import settings
 from .models import CompleteImage, ChallengeMember, Challenge
+from rest_framework.parsers import MultiPartParser, FormParser
 
 
 from .serializers import (
@@ -54,6 +56,7 @@ class ChallengeListCreateView(ListCreateAPIView):
     """
     permission_classes = [AllowAny]
     pagination_class = StandardPagePagination
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_permissions(self):
         """
