@@ -51,11 +51,6 @@ class Conflict(APIException):
 
 
 
-class Conflict(APIException):
-    status_code = 409
-    default_detail = "요청이 충돌합니다."
-
-
 
 class Gone(APIException):
     """
@@ -147,26 +142,36 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
 
     # 4) 정원 확인
     if challenge.member_limit and challenge.member_count_cache >= challenge.member_limit:
-        # 409 충돌
-        raise ValidationError({"detail": "정원이 가득 찼습니다."}, code=status.HTTP_409_CONFLICT)
+        # 409 - 정원 초과
+        raise Conflict({
+            "error": "CHALLENGE_FULL",
+            "message": "정원이 가득 찼습니다.",
+        })
 
     # 5) 참가비 처리 (entry_fee > 0일 때만)
     entry_fee_charged = 0
-    User = get_user_model()  # 모델 클래스 확보 (지연객체가 아님)
+    User = get_user_model()  # 모델 클래스 확보
     if challenge.entry_fee and challenge.entry_fee > 0:
         # 유저 레코드에 락
         u = User.objects.select_for_update().get(pk=user.pk)
+        current_balance = (u.point_balance or 0)
+        required = challenge.entry_fee
 
-        if (u.point_balance or 0) < challenge.entry_fee:
-            # 409 충돌
-            raise ValidationError({"detail": "포인트가 부족합니다."}, code=status.HTTP_409_CONFLICT)
+        if current_balance < required:
+            # 409 - 포인트 부족
+            raise Conflict({
+                "error": "INSUFFICIENT_POINT",
+                "message": "포인트가 부족합니다.",
+                "required_point": required,
+                "current_balance": current_balance,
+            })
 
         # F() 연산으로 차감
-        User.objects.filter(pk=u.pk).update(point_balance=F("point_balance") - challenge.entry_fee)
+        User.objects.filter(pk=u.pk).update(point_balance=F("point_balance") - required)
         # 최신 잔액 반영
         u.refresh_from_db(fields=["point_balance"])
         user_point_balance_after = u.point_balance
-        entry_fee_charged = challenge.entry_fee
+        entry_fee_charged = required
     else:
         user_point_balance_after = getattr(user, "point_balance", 0)
 
@@ -194,6 +199,7 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
         "user_point_balance_after": user_point_balance_after,
         "message": "참가가 완료되었습니다.",
     }
+
 
 
 
