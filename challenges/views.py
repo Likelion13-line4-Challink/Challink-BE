@@ -55,6 +55,16 @@ class ChallengeListCreateView(ListCreateAPIView):
     permission_classes = [AllowAny]
     pagination_class = StandardPagePagination
 
+    def get_permissions(self):
+        """
+        - GET  : 누구나 허용 (AllowAny)
+        - POST : 로그인 필수 (IsAuthenticated)
+        """
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+
     def get_queryset(self):
         req = self.request
         include_full = (req.query_params.get("include_full", "false").lower() == "true")
