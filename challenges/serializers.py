@@ -1,5 +1,7 @@
+from django.db import transaction
+from django.db.models import F
 from rest_framework import serializers
-from .models import CompleteImage, Comment, Challenge, ChallengeCategory,InviteCode
+from .models import CompleteImage, Comment, Challenge, ChallengeCategory, InviteCode, ChallengeMember
 
 from django.utils.translation import gettext_lazy as _
 
@@ -267,6 +269,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated):
         # 카테고리 확인
         try:
@@ -279,6 +282,8 @@ class ChallengeCreateSerializer(serializers.Serializer):
         method_str = validated["settlement_method"]  # 현재는 PROPORTIONAL만 지원
         settle_model = self.SUPPORTED_SETTLEMENT_METHODS[method_str]
 
+        request_user = self.context["request"].user     # 요청자(생성자)
+        status_fixed = "active"   # draft 불필요
 
         challenge = Challenge.objects.create(
             title=validated["title"],
@@ -290,12 +295,25 @@ class ChallengeCreateSerializer(serializers.Serializer):
             freq_n_days=validated.get("freq_n_days"),
             ai_condition=validated.get("ai_condition_text", "") or "",
             settle_method=settle_model,
-            status=validated.get("status", "draft"),
+            status=status_fixed,
             start_date=validated["start_date"],
             end_date=validated["end_date"],
             category=category,
-            owner=self.context["request"].user,  # 생성자 자동 지정(creator)
+            owner=request_user,  # 생성자 지정
         )
+
+        # 생성자를 owner 멤버로 자동 참여
+        ChallengeMember.objects.create(
+            challenge=challenge,
+            user=request_user,
+            role="owner",
+        )
+
+        # 멤버 카운트 캐시 원자적 +1 & refresh
+        Challenge.objects.filter(pk=challenge.pk).update(
+            member_count_cache=F("member_count_cache") + 1
+        )
+        challenge.refresh_from_db(fields=["member_count_cache"])
 
         # 초대코드 생성 (챌린지 생성 직후)
         invite = generate_invite_code_for_challenge(challenge=challenge)
