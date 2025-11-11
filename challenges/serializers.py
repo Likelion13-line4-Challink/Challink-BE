@@ -215,7 +215,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200)
     description = serializers.CharField(allow_blank=True, required=False)
     category_id = serializers.IntegerField()
-    cover_image = serializers.URLField(required=False, allow_blank=True)
+    cover_image = serializers.ImageField(required=False, allow_null=True)
     entry_fee = serializers.IntegerField(min_value=0)
     duration_weeks = serializers.IntegerField(min_value=1)
     freq_type = serializers.ChoiceField(choices=["DAILY", "WEEKDAYS", "WEEKENDS", "N_DAYS_PER_WEEK"])
