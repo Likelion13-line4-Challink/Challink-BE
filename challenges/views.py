@@ -48,6 +48,22 @@ from .services import create_comment, join_challenge, Conflict, end_challenge, v
 DEFAULT_DISPLAY_THUMBNAIL = getattr(settings, "DEFAULT_DISPLAY_THUMBNAIL", None)
 
 
+# 절대 URL 생성 유틸
+def _abs_image_url(request, image_field):
+    """
+    ImageField → 절대 URL 문자열로 안전 변환
+    - 파일이 없으면 None 반환
+    """
+    if not image_field:
+        return None
+    try:
+        url = image_field.url  # ex) /media/...
+    except Exception:
+        return None
+    # 절대 URL로 통일
+    return request.build_absolute_uri(url)
+
+
 class ChallengeListCreateView(ListCreateAPIView):
     """
     GET/POST /challenges/
@@ -100,7 +116,7 @@ class ChallengeListCreateView(ListCreateAPIView):
         in_ser = ChallengeCreateSerializer(data=request.data, context={"request": request})
         in_ser.is_valid(raise_exception=True)
         obj = in_ser.save()
-        out_ser = ChallengeCreateOutSerializer(obj)
+        out_ser = ChallengeCreateOutSerializer(obj, context={"request": request})
         return Response(out_ser.data, status=201)
 
 
@@ -197,7 +213,7 @@ class MyChallengeListView(GenericAPIView):
                     "id": ch.id,
                     "title": ch.title,
                     "subtitle": ch.subtitle,
-                    "cover_image": ch.cover_image,
+                    "cover_image": _abs_image_url(request, ch.cover_image),
                     "duration_weeks": ch.duration_weeks,
                     "freq_type": ch.freq_type,
                     "entry_fee": ch.entry_fee,
@@ -262,7 +278,7 @@ class MyCompletedChallengeListView(GenericAPIView):
                     "id": ch.id,
                     "title": ch.title,
                     "subtitle": ch.subtitle,
-                    "cover_image": ch.cover_image,
+                    "cover_image": _abs_image_url(request, ch.cover_image),
                     "duration_weeks": ch.duration_weeks,
                     "freq_type": ch.freq_type,
                     "entry_fee": ch.entry_fee,
