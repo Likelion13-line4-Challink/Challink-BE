@@ -409,6 +409,7 @@ class ChallengeDetailView(GenericAPIView):
             "entry_fee": challenge.entry_fee,
             "duration_weeks": challenge.duration_weeks,
             "freq_type": challenge.freq_type,
+            "freq_n_days": challenge.freq_n_days,
             "category": {"id": challenge.category_id, "name": challenge.category.name if challenge.category else None},
             "status": challenge.status,
             "start_date": challenge.start_date,

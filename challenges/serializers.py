@@ -148,7 +148,7 @@ class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = (
             "id", "title", "owner_name", "cover_image",
-            "entry_fee", "duration_weeks", "freq_type",
+            "entry_fee", "duration_weeks", "freq_type", "freq_n_days",
             "subtitle", "ai_condition", "category",
             "status", "start_date", "end_date",
             "member_count", "member_limit",
@@ -215,6 +215,7 @@ class ChallengeDetailForMemberSerializer(serializers.Serializer):
     entry_fee = serializers.IntegerField()
     duration_weeks = serializers.IntegerField()
     freq_type = serializers.CharField()
+    freq_n_days = serializers.IntegerField(allow_null=True)
     category = CategoryMiniOut()
     status = serializers.CharField()
     start_date = serializers.DateField(allow_null=True)
