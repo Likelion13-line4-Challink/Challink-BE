@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import datetime, time, timedelta
+from datetime import datetime, date, time, timedelta
 
 from django.db import transaction, IntegrityError
 from django.db.models import F
@@ -154,10 +154,10 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
     if challenge.entry_fee and challenge.entry_fee > 0:
         # 유저 레코드에 락
         u = User.objects.select_for_update().get(pk=user.pk)
-        current_balance = (u.point_balance or 0)
+        current_balance = (u.point_balance or 0) #
         required = challenge.entry_fee
 
-        if current_balance < required:
+        if (u.point_balance or 0) < required:
             # 409 - 포인트 부족
             raise Conflict({
                 "error": "INSUFFICIENT_POINT",
@@ -165,6 +165,12 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
                 "required_point": required,
                 "current_balance": current_balance,
             })
+        u.apply_points(
+        delta=-required,
+        description=challenge.title,
+        challenge=challenge,
+        history_type="JOIN",   # PointHistory.type = "참가" 로 매핑되도록
+        )
 
         # F() 연산으로 차감
         User.objects.filter(pk=u.pk).update(point_balance=F("point_balance") - required)
@@ -187,6 +193,8 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
         member_count_cache=F("member_count_cache") + 1
     )
     challenge.refresh_from_db(fields=["member_count_cache"])
+
+    
 
     # 8) 결과 payload
     return {
