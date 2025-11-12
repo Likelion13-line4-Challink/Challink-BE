@@ -2,6 +2,8 @@
 from google import genai
 import os, json, re, base64, io, mimetypes, logging
 from PIL import Image
+from pillow_heif import register_heif_opener
+register_heif_opener()
 
 logger = logging.getLogger(__name__) 
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -30,15 +32,29 @@ INVALID_JSON_REASON = "AI 응답 구조가 올바르지 않습니다."
 
 def _resize_to_b64_inline(uploaded_file) -> dict:
     name = (getattr(uploaded_file, "name", "") or "").lower()
+
+    # ① MIME 타입 추정
     ct = getattr(uploaded_file, "content_type", "") or mimetypes.guess_type(name)[0] or "image/jpeg"
+
+    # ② HEIC/HEIF 확장자 보정
+    if name.endswith((".heic", ".heif", ".avif")):
+        ct = "image/heic"
+
+    # ③ 이미지 로드 (HEIC 포함)
     uploaded_file.seek(0)
     img = Image.open(uploaded_file).convert("RGB")
+
+    # ④ 크기 축소 및 JPEG 변환
     img.thumbnail((1024, 1024))
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=80, optimize=True)
+
+    # ⑤ Base64 인코딩
     raw = buf.getvalue()
     b64 = base64.b64encode(raw).decode("utf-8")
+
     return {"inline_data": {"mime_type": ct, "data": b64}}
+
 
 def _json_only(s: str):
     s = (s or "").strip()
