@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.generics import GenericAPIView, ListCreateAPIView
 from main.utils.pagination import StandardPagePagination
 from django.conf import settings
-from .models import CompleteImage, ChallengeMember, Challenge
+from .models import CompleteImage, ChallengeMember, Challenge, InviteCode  
 from rest_framework.parsers import MultiPartParser, FormParser
 
 
@@ -387,6 +387,20 @@ class ChallengeDetailView(GenericAPIView):
                 "is_owner": (m.role == "owner"),
             })
 
+        # 총 참가비 추가
+        total_entry_pot = (challenge.entry_fee or 0) * (challenge.member_count_cache or 0)
+        
+        valid_invites = list(
+            InviteCode.objects
+            .filter(challenge=challenge, expires_at__gte=timezone.now())
+            .order_by("-created_at")
+            .values("code","expires_at")
+        )
+        invite_codes = [
+            {"code": v["code"], "expires_at": v["expires_at"], "case_sensitive": True}
+            for v in valid_invites
+        ]
+
         payload = {
             "id": challenge.id,
             "title": challenge.title,
@@ -412,6 +426,10 @@ class ChallengeDetailView(GenericAPIView):
                 "joined_at": my_member.joined_at,
             },
             "settlement_note": "🔥 총 참가비: N p / 모인 참가비를 성공자들에게 N:1 분배해요",
+
+            "ai_condition": challenge.ai_condition,   # ✅ 추가
+            "total_entry_pot": total_entry_pot,       # ✅ 추가
+            "invite_codes": invite_codes,   # ✅ 추가
         }
         ser = ChallengeDetailForMemberSerializer(payload)
         return Response(ser.data, status=200)
