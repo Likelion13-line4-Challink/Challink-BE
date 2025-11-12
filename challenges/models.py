@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from PIL import Image
+import io, os
 from django.core.files.base import ContentFile
 from pillow_heif import register_heif_opener
 register_heif_opener()
@@ -134,6 +135,11 @@ class CompleteImage(models.Model):
         related_name="complete_images",
     )
     image = models.ImageField(upload_to="complete_images/")
+    converted_image = models.ImageField(
+        upload_to="complete_images/converted/",
+        null=True,
+        blank=True
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     date = models.DateField(null=True, blank=True)
     comment_count = models.PositiveIntegerField(default=0)
@@ -171,7 +177,7 @@ class CompleteImage(models.Model):
                 super().save(update_fields=["converted_image"])
             except Exception as e:
                 print("HEIC → JPEG 변환 실패:", e)
-                
+
     def __str__(self):
         return f"Image #{self.id} by user#{self.user_id}"
 
