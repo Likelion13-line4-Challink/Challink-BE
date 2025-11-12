@@ -1,5 +1,9 @@
 from django.db import models
 from django.conf import settings
+from PIL import Image
+from django.core.files.base import ContentFile
+from pillow_heif import register_heif_opener
+register_heif_opener()
 
 
 # ✅ 챌린지 카테고리
@@ -154,6 +158,20 @@ class CompleteImage(models.Model):
             models.Index(fields=["-created_at"]),
         ]
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)  # 원본 먼저 저장
+        if self.image and not self.converted_image:
+            try:
+                self.image.open()
+                img = Image.open(self.image).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=85)
+                filename = os.path.splitext(self.image.name)[0] + ".jpg"
+                self.converted_image.save(filename, ContentFile(buf.getvalue()), save=False)
+                super().save(update_fields=["converted_image"])
+            except Exception as e:
+                print("HEIC → JPEG 변환 실패:", e)
+                
     def __str__(self):
         return f"Image #{self.id} by user#{self.user_id}"
 
