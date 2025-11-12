@@ -48,6 +48,7 @@ class CompleteImageDetailSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source="user.name", read_only=True)
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = CompleteImage
@@ -64,10 +65,15 @@ class CompleteImageDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_image(self, obj):
+        # "/media/..." → "media/..."
+        return obj.image.url.lstrip("/") if obj.image else None
+
 
 class CompleteImageListSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source="user.name", read_only=True)
     user_id = serializers.IntegerField(source="user.id", read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = CompleteImage
@@ -81,6 +87,10 @@ class CompleteImageListSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_image(self, obj):
+        # "/media/..." → "media/..."
+        return obj.image.url.lstrip("/") if obj.image else None
 
 
 

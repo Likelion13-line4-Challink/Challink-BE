@@ -357,16 +357,18 @@ class ChallengeDetailView(GenericAPIView):
             date=today
         ).values_list("user_id", flat=True))
 
-        latest_approved = (CompleteImage.objects
-                           .filter(challenge_member__challenge_id=challenge.id, status="approved")
-                           .order_by("user_id", "-date", "-id")
-                           .values("user_id", "image"))
+        latest_approved = (
+            CompleteImage.objects
+            .filter(challenge_member__challenge_id=challenge.id, status="approved")
+            .order_by("user_id", "-date", "-id")
+        )
 
         latest_map = {}
-        for row in latest_approved:
-            uid = row["user_id"]
+        for img in latest_approved:
+            uid = img.user_id
             if uid not in latest_map:
-                latest_map[uid] = row["image"]
+                # ✅ /media/ → media/
+                latest_map[uid] = img.image.url.lstrip("/") if img.image else None
 
         participants = []
         for m in members:
