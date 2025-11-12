@@ -66,7 +66,10 @@ class CompleteImageDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_image(self, obj):
-        # "/media/..." → "media/..."
+        # 변환본이 있으면 우선 사용
+        if getattr(obj, "converted_image", None):
+            return obj.converted_image.url.lstrip("/")
+        # 없으면 원본 사용
         return obj.image.url.lstrip("/") if obj.image else None
 
 
@@ -89,7 +92,10 @@ class CompleteImageListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_image(self, obj):
-        # "/media/..." → "media/..."
+        # 변환본이 있으면 우선 사용
+        if getattr(obj, "converted_image", None):
+            return obj.converted_image.url.lstrip("/")
+        # 없으면 원본 사용
         return obj.image.url.lstrip("/") if obj.image else None
 
 
