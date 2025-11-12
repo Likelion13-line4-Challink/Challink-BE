@@ -112,7 +112,7 @@ class ChallengeCardSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = (
             "id", "title", "subtitle", "cover_image",
-            "duration_weeks", "freq_type", "entry_fee",
+            "duration_weeks", "freq_type", "freq_n_days", "entry_fee",
             "category", "member_count", "member_limit",
             "status", "start_date", "end_date",
             "is_joined",
@@ -197,7 +197,11 @@ class ProgressSummarySerializer(serializers.Serializer):
     total_members = serializers.IntegerField()
     date = serializers.DateField()
 
-
+class InviteCodeMiniSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+    case_sensitive = serializers.BooleanField()
+    
 class ChallengeDetailForMemberSerializer(serializers.Serializer):
     # 참여 중(진행 화면)
     id = serializers.IntegerField()
@@ -215,17 +219,17 @@ class ChallengeDetailForMemberSerializer(serializers.Serializer):
     participants = ParticipantMiniSerializer(many=True)
     my_membership = serializers.DictField()
     settlement_note = serializers.CharField()
-
-
-
-
+    ai_condition = serializers.CharField()                 # ✅ 추가
+    total_entry_pot = serializers.IntegerField()           # ✅ 추가
+    invite_codes = InviteCodeMiniSerializer(many=True)   # ✅ 추가
 
 
 
 class ChallengeCreateSerializer(serializers.Serializer):
     # API 명세 입력 스키마 (클라이언트가 보내는 키 그대로)
     title = serializers.CharField(max_length=200)
-    description = serializers.CharField(allow_blank=True, required=False)
+    subtitle = serializers.CharField(required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
     category_id = serializers.IntegerField()
     cover_image = serializers.ImageField(required=False, allow_null=True)
     entry_fee = serializers.IntegerField(min_value=0)
@@ -295,9 +299,13 @@ class ChallengeCreateSerializer(serializers.Serializer):
         request_user = self.context["request"].user     # 요청자(생성자)
         status_fixed = "active"   # draft 불필요
 
+        subtitle_val = validated.get("subtitle")
+        if subtitle_val is None:
+            subtitle_val = validated.get("description", "") or ""
+
         challenge = Challenge.objects.create(
             title=validated["title"],
-            subtitle="",
+            subtitle=subtitle_val,
             cover_image=validated.get("cover_image", "") or "",
             entry_fee=validated["entry_fee"],
             duration_weeks=validated["duration_weeks"],
@@ -336,6 +344,7 @@ class ChallengeCreateSerializer(serializers.Serializer):
 
 class ChallengeCreateOutSerializer(serializers.ModelSerializer):
     # 모델 → API 응답 매핑 (키 이름 맞춤)
+    subtitle = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True, required=False, allow_blank=True)
     challenge_id = serializers.IntegerField(source="id", read_only=True)
     creator_id = serializers.IntegerField(source="owner_id", read_only=True)
@@ -353,7 +362,7 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = (
             "challenge_id", "creator_id", "category_id",
-            "title", "description", "cover_image",
+            "title", "description", "subtitle", "cover_image",
             "entry_fee", "duration_weeks",
             "freq_type", "freq_n_days",
             "ai_condition_text", "settlement_method",
@@ -361,6 +370,12 @@ class ChallengeCreateOutSerializer(serializers.ModelSerializer):
             "invite_code",
             "created_at", "updated_at",
         )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not data.get("description"):
+            data["description"] = data.get("subtitle") or ""
+        return data
 
     def get_cover_image(self, obj):
         # 파일이 없으면 null
@@ -586,3 +601,4 @@ class InviteCodeJoinOutSerializer(serializers.Serializer):
     can_join = serializers.BooleanField()
     challenge_member_id = serializers.IntegerField(required=False, allow_null=True)
     message = serializers.CharField()
+
