@@ -3,9 +3,10 @@ from django.db.models import F
 from rest_framework import serializers
 from .models import CompleteImage, Comment, Challenge, ChallengeCategory, InviteCode, ChallengeMember
 
+from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 
-from .services import generate_invite_code_for_challenge
+from .services import generate_invite_code_for_challenge, Conflict
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -148,7 +149,7 @@ class ChallengeDetailForGuestSerializer(serializers.ModelSerializer):
         model = Challenge
         fields = (
             "id", "title", "owner_name", "cover_image",
-            "entry_fee", "duration_weeks", "freq_type",
+            "entry_fee", "duration_weeks", "freq_type", "freq_n_days",
             "subtitle", "ai_condition", "category",
             "status", "start_date", "end_date",
             "member_count", "member_limit",
@@ -215,6 +216,7 @@ class ChallengeDetailForMemberSerializer(serializers.Serializer):
     entry_fee = serializers.IntegerField()
     duration_weeks = serializers.IntegerField()
     freq_type = serializers.CharField()
+    freq_n_days = serializers.IntegerField(allow_null=True)
     category = CategoryMiniOut()
     status = serializers.CharField()
     start_date = serializers.DateField(allow_null=True)
@@ -325,6 +327,34 @@ class ChallengeCreateSerializer(serializers.Serializer):
             category=category,
             owner=request_user,  # 생성자 지정
         )
+
+        # 생성자 참가비 즉시 차감 (entry_fee > 0 일 때)
+        entry_fee = challenge.entry_fee or 0
+        if entry_fee > 0:
+            User = get_user_model()
+            # 생성자 레코드 락
+            u = User.objects.select_for_update().get(pk=request_user.pk)
+            current_balance = u.point_balance or 0
+            if current_balance < entry_fee: # 현재잔고가 참가비보다 적다면
+                # 409 Conflict - 포인트 부족
+                raise Conflict({
+                    "error": "INSUFFICIENT_POINT",
+                    "message": "포인트가 부족합니다.",
+                    "required_point": entry_fee,
+                    "current_balance": current_balance,
+                })
+            # 포인트 차감(+ 히스토리 기록)
+            u.apply_points(
+                delta=-entry_fee,
+                description=challenge.title,
+                challenge=challenge,
+                history_type="JOIN",
+            )
+            # 잔액
+            u.refresh_from_db(fields=["point_balance"])
+
+
+
 
         # 생성자를 owner 멤버로 자동 참여
         ChallengeMember.objects.create(
@@ -499,61 +529,14 @@ class ChallengeEndResponseSerializer(serializers.Serializer):
 class ChallengeRuleUpdateSerializer(serializers.Serializer):
     """
     PATCH /challenges/{challenge_id}/rules 요청용 입력 스키마
-    - 부분 업데이트 가능
-    - freq_type / freq_n_days / ai_condition_text 중 일부만 보내도 됨
+    - 요청 바디에는 ai_condition_text만 사용
+    - 다른 키(freq_type, freq_n_days 등)가 들어와도 무시됨 (에러 X)
     """
-    # API에서 사용하는 영문 코드 기준
-    freq_type = serializers.ChoiceField(
-        choices=["DAILY", "WEEKDAYS", "WEEKENDS", "N_DAYS_PER_WEEK"],
-        required=False,
-    )
-    freq_n_days = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-        min_value=1,
-        max_value=6,
-    )
     ai_condition_text = serializers.CharField(
-        required=False,
-        allow_blank=True,
+        required=True,
+        allow_blank=False,
     )
 
-    def validate(self, attrs):
-        """
-        - freq_type, freq_n_days가 함께/단독으로 들어와도 규칙을 지키도록 검증
-        - challenge 현재 상태까지 고려해서 N_DAYS_PER_WEEK 규칙 체크
-        """
-        challenge = self.context["challenge"]  # view에서 넣어줄 것
-
-        # 최종적으로 적용될 freq_type(모델 값: "매일", "평일", "주말", "주 N일")
-        if "freq_type" in attrs:
-            # API → 모델 매핑 재사용
-            target_freq_type_model = ChallengeCreateSerializer.FREQ_IN_MAP[attrs["freq_type"]]
-        else:
-            target_freq_type_model = challenge.freq_type
-
-        # 최종적으로 적용될 freq_n_days
-        if "freq_n_days" in attrs:
-            target_freq_n_days = attrs["freq_n_days"]
-        else:
-            target_freq_n_days = challenge.freq_n_days
-
-        # 규칙 1) 주 N일인 경우 freq_n_days 반드시 필요
-        if target_freq_type_model == "주 N일":
-            if target_freq_n_days is None:
-                raise serializers.ValidationError({
-                    "freq_n_days": "freq_type이 N_DAYS_PER_WEEK인 경우 1~6 사이 정수를 반드시 보내야 합니다."
-                })
-
-        # 규칙 2) 주 N일이 아닌데 freq_n_days를 보내면 안 됨
-        if target_freq_type_model != "주 N일":
-            # attrs에 명시적으로 freq_n_days가 들어온 경우만 검사
-            if "freq_n_days" in attrs and attrs["freq_n_days"] not in (None,):
-                raise serializers.ValidationError({
-                    "freq_n_days": "이 freq_type에서는 freq_n_days를 보내지 않습니다."
-                })
-
-        return attrs
 
 
 class ChallengeRuleUpdateOutSerializer(serializers.Serializer):
