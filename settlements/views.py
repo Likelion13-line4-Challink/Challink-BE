@@ -5,11 +5,14 @@ from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
 from rest_framework import serializers
 from rest_framework import status, permissions
 
 from challenges.models import Challenge, ChallengeMember
+from accounts.models import PointHistory
+
 from .models import Settlement, SettlementDetail
 from .selectors import get_or_create_settlement, collect_progress, _required_days
 from .services import run_settlement
@@ -177,8 +180,12 @@ class WalletChargeView(APIView):
         user = request.user
 
         with transaction.atomic():
-            # apply_points(변화량, type, challenge, description)
-            history = user.apply_points(amount, "charge", None, description)
+            history = user.apply_points(
+                delta=amount,
+                description=description,
+                challenge=None,
+                history_type=PointHistory.Type.CHARGE,  
+            )
 
         return Response(
             {
