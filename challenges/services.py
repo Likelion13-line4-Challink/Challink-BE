@@ -237,21 +237,12 @@ def end_challenge(*, user, challenge_id: int) -> dict:
     try:
         challenge = (
             Challenge.objects.select_for_update()
-            .select_related("owner")
             .get(pk=challenge_id)
         )
     except Challenge.DoesNotExist:
         raise NotFound("해당 챌린지를 찾을 수 없습니다.")
 
-    # 2) 권한 체크: 생성자(owner) 이거나 운영자(여기선 is_staff 기준)만 허용
-    is_owner = (challenge.owner_id == user.id)
-    is_operator = getattr(user, "is_staff", False)
 
-    if not (is_owner or is_operator):
-        # 명세에 맞춘 에러 포맷
-        raise PermissionDenied(
-            {"error": "FORBIDDEN", "message": "종료 권한이 없습니다."}
-        )
 
     # 3) 이미 종료된 챌린지인지 체크
     if challenge.status == "ended":
