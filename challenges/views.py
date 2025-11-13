@@ -369,8 +369,13 @@ class ChallengeDetailView(GenericAPIView):
         for img in latest_approved:
             uid = img.user_id
             if uid not in latest_map:
-                # ✅ /media/ → media/
-                latest_map[uid] = img.image.url.lstrip("/") if img.image else None
+                # ✅ HEIC → JPEG 변환본 우선 사용
+                if getattr(img, "converted_image", None):
+                    latest_map[uid] = img.converted_image.url.lstrip("/")
+                elif img.image:
+                    latest_map[uid] = img.image.url.lstrip("/")
+                else:
+                    latest_map[uid] = None
 
         participants = []
         for m in members:
