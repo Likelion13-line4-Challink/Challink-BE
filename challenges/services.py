@@ -178,11 +178,9 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
         history_type="JOIN",   # PointHistory.type = "참가" 로 매핑되도록
         )
 
-        # F() 연산으로 차감
-        User.objects.filter(pk=u.pk).update(point_balance=F("point_balance") - required)
-        # 최신 잔액 반영
         u.refresh_from_db(fields=["point_balance"])
         user_point_balance_after = u.point_balance
+
         entry_fee_charged = required
     else:
         user_point_balance_after = getattr(user, "point_balance", 0)
