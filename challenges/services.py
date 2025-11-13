@@ -50,6 +50,12 @@ class Conflict(APIException):
 
 
 
+# 정원 마감 등 “요청 형식은 맞으나 현재 상태로 처리 불가”
+class Unprocessable(APIException):
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_detail = "요청을 처리할 수 없습니다."
+
+
 
 
 class Gone(APIException):
@@ -142,8 +148,8 @@ def join_challenge(*, user, challenge_id: int, agree_terms: bool = False):
 
     # 4) 정원 확인
     if challenge.member_limit and challenge.member_count_cache >= challenge.member_limit:
-        # 409 - 정원 초과
-        raise Conflict({
+        # 422 - 정원 초과
+        raise Unprocessable({
             "error": "CHALLENGE_FULL",
             "message": "정원이 가득 찼습니다.",
         })
