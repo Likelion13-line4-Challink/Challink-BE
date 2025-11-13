@@ -3,9 +3,10 @@ from django.db.models import F
 from rest_framework import serializers
 from .models import CompleteImage, Comment, Challenge, ChallengeCategory, InviteCode, ChallengeMember
 
+from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 
-from .services import generate_invite_code_for_challenge
+from .services import generate_invite_code_for_challenge, Conflict
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -326,6 +327,34 @@ class ChallengeCreateSerializer(serializers.Serializer):
             category=category,
             owner=request_user,  # 생성자 지정
         )
+
+        # 생성자 참가비 즉시 차감 (entry_fee > 0 일 때)
+        entry_fee = challenge.entry_fee or 0
+        if entry_fee > 0:
+            User = get_user_model()
+            # 생성자 레코드 락
+            u = User.objects.select_for_update().get(pk=request_user.pk)
+            current_balance = u.point_balance or 0
+            if current_balance < entry_fee: # 현재잔고가 참가비보다 적다면
+                # 409 Conflict - 포인트 부족
+                raise Conflict({
+                    "error": "INSUFFICIENT_POINT",
+                    "message": "포인트가 부족합니다.",
+                    "required_point": entry_fee,
+                    "current_balance": current_balance,
+                })
+            # 포인트 차감(+ 히스토리 기록)
+            u.apply_points(
+                delta=-entry_fee,
+                description=challenge.title,
+                challenge=challenge,
+                history_type="JOIN",
+            )
+            # 잔액
+            u.refresh_from_db(fields=["point_balance"])
+
+
+
 
         # 생성자를 owner 멤버로 자동 참여
         ChallengeMember.objects.create(
