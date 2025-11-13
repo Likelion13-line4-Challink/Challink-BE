@@ -165,7 +165,7 @@ class CompleteImage(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # 원본 먼저 저장
+        """HEIC → JPEG 변환본 자동 생성 (동기 방식)"""
         if self.image and not self.converted_image:
             try:
                 self.image.open()
@@ -173,10 +173,12 @@ class CompleteImage(models.Model):
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=85)
                 filename = os.path.splitext(self.image.name)[0] + ".jpg"
+                # 변환본을 미리 세팅 후 함께 저장
                 self.converted_image.save(filename, ContentFile(buf.getvalue()), save=False)
-                super().save(update_fields=["converted_image"])
             except Exception as e:
                 print("HEIC → JPEG 변환 실패:", e)
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Image #{self.id} by user#{self.user_id}"
