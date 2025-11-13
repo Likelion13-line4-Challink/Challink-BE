@@ -138,7 +138,9 @@ class ChallengeAIVerifyLiteView(APIView):
             "raw_ai_response": raw_resp,
             "complete_image": {
                 "id": ci.id,
-                "image_url": getattr(ci.image, "url", None),
+                "image_url": getattr(ci.converted_image, "url", None)
+                    if getattr(ci, "converted_image", None)
+                    else getattr(ci.image, "url", None),
                 "status": ci.status,
                 "created_at": ci.created_at,
                 "reviewed_at": ci.reviewed_at,
