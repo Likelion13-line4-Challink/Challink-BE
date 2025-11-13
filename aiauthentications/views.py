@@ -128,6 +128,8 @@ class ChallengeAIVerifyLiteView(APIView):
         ci.review_reasons = "\n".join(reasons)
         ci.save(update_fields=["status", "reviewed_at", "review_reasons"])
 
+        ci.refresh_from_db(fields=["converted_image"])
+
         # 8) 응답
         body = {
             "challenge_id": ch.id,
